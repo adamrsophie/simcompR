@@ -152,15 +152,18 @@ blocks</td>
 </tbody>
 </table>
 <p>Inside a segment discrete states, held outputs and modes are frozen.
-Kinks inside memoryless blocks (<code>saturation</code>,
-<code>dead_zone</code>, <code>abs</code>, <code>compare</code>,
-<code>lookup</code>) have no crossing function in this version; the
-adaptive step control handles them, so put an event on the input when
-the exact time matters. Zero-crossing functions are monitored by the
-root finder of <code>lsoda</code> (or <code>lsode</code>,
-<code>lsodes</code>, <code>lsodar</code>). When a function changes sign,
-the solver stops at the crossing, the event is applied, and integration
-restarts from the new state.</p>
+Kinks of memoryless blocks (the corners of <code>saturation</code>,
+<code>dead_zone</code>, <code>abs</code>, <code>lookup</code> and
+<code>minmax</code>, the switching point of <code>compare</code>, the
+jumps of <code>math</code> with <code>sign</code>, <code>floor</code>,
+<code>ceiling</code> or <code>round</code>) are located too: the
+integrator restarts exactly at each one, silently, without an event in
+the log. Methods without root finding (such as <code>rk4</code>) skip
+them. Zero-crossing functions are monitored by the root finder of
+<code>lsoda</code> (or <code>lsode</code>, <code>lsodes</code>,
+<code>lsodar</code>). When a function changes sign, the solver stops at
+the crossing, the event is applied, and integration restarts from the
+new state.</p>
 </div>
 <div class="section level2">
 <h2 id="the-bouncing-ball">The bouncing ball<a class="anchor" aria-label="anchor" href="#the-bouncing-ball"></a>
@@ -355,6 +358,20 @@ round-off of, zero. A function whose value at the start of a segment is
 within <code>zc_tol</code> of zero is treated as starting at zero, so
 the same root is not detected twice. A crossing in the ignored direction
 restarts the solver without any action.</p>
+<p>A function that starts a segment exactly on its level, and was not
+just fired, fires when it moves away in the trigger direction. Here the
+state starts on the level and falls at once:</p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">saw</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"saw"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">saw</span>, <span class="st">"constant"</span>, <span class="st">"down"</span>, value <span class="op">=</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">saw</span>, <span class="st">"integrator"</span>, <span class="st">"x"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">saw</span>, <span class="st">"down"</span>, <span class="st">"x"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_event.html">sim_add_event</a></span><span class="op">(</span><span class="va">saw</span>, <span class="st">"wrap"</span>, <span class="fu"><a href="../reference/sim_add_event.html">sim_zero_crossing</a></span><span class="op">(</span><span class="st">"x"</span>, <span class="st">"falling"</span><span class="op">)</span>, reset <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">"1"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_signal.html">sim_events</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">saw</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">2.5</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt;   time event          type source direction</span></span>
+<span><span class="co">#&gt; 1    0  wrap zero_crossing      x   falling</span></span>
+<span><span class="co">#&gt; 2    1  wrap zero_crossing      x   falling</span></span>
+<span><span class="co">#&gt; 3    2  wrap zero_crossing      x   falling</span></span></code></pre></div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

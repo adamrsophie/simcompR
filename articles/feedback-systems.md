@@ -44,6 +44,7 @@ plan <- sim_compile(loop)
 plan
 #> <sim_plan 'pi_loop'> 9 block(s), 2 continuous state(s), 0 discrete state(s), 9 signal element(s)
 #> Execution order: I > plant > reference > sensor > error > Igain > P > controller > actuator
+#> Zero-crossing functions: 2; events: 0
 ```
 
 The loop

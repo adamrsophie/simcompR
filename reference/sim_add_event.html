@@ -82,6 +82,8 @@ the event can reset the state of any block and can stop the simulation.</p>
 <span>  priority <span class="op">=</span> <span class="fl">0</span></span>
 <span><span class="op">)</span></span>
 <span></span>
+<span><span class="fu">sim_remove_event</span><span class="op">(</span><span class="va">model</span>, <span class="va">name</span><span class="op">)</span></span>
+<span></span>
 <span><span class="fu">sim_zero_crossing</span><span class="op">(</span></span>
 <span>  <span class="va">signal</span>,</span>
 <span>  direction <span class="op">=</span> <span class="st">"either"</span>,</span>
@@ -102,7 +104,8 @@ the event can reset the state of any block and can stop the simulation.</p>
 
 
 <dt id="arg-name">name<a class="anchor" aria-label="anchor" href="#arg-name"></a></dt>
-<dd><p>Unique event name.</p></dd>
+<dd><p>Unique event name; for <code>sim_remove_event()</code>, the event to
+remove.</p></dd>
 
 
 <dt id="arg-trigger">trigger<a class="anchor" aria-label="anchor" href="#arg-trigger"></a></dt>
@@ -147,7 +150,8 @@ the event can reset the state of any block and can stop the simulation.</p>
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p><code>sim_add_event()</code> returns the model invisibly; the trigger
+    <p><code>sim_add_event()</code> and <code>sim_remove_event()</code> return the model
+invisibly; the trigger
 constructors return trigger objects.</p>
     </div>
     <div class="section level2">
@@ -167,6 +171,11 @@ for continuous blocks, discrete states otherwise), <code>s</code> is a named lis
 all block outputs at the event time (before the reset), and <code>t</code> is the
 time. Model parameters are also visible in string expressions. Only
 string resets can be saved with <code><a href="sim_write_json.html">sim_write_json()</a></code>.</p>
+<p>A <code>signal</code> or reset target inside a subsystem instance is written as a
+path, <code>"instance/block"</code> (deeper levels add more <code>/</code> parts). A crossing
+whose function is exactly at <code>level</code> when a segment starts fires there
+when the signal moves away in the trigger direction (unless the same
+event has just fired at that instant).</p>
 <p>When several events fire at the same instant they are applied in
 increasing <code>priority</code>, then by name. Every reset sees the state left by
 the previous one.</p>

@@ -139,7 +139,8 @@ editing blocks.</p>
 <span><span class="va">plan</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">loop</span><span class="op">)</span></span>
 <span><span class="va">plan</span></span>
 <span><span class="co">#&gt; &lt;sim_plan 'pi_loop'&gt; 9 block(s), 2 continuous state(s), 0 discrete state(s), 9 signal element(s)</span></span>
-<span><span class="co">#&gt; Execution order: I &gt; plant &gt; reference &gt; sensor &gt; error &gt; Igain &gt; P &gt; controller &gt; actuator</span></span></code></pre></div>
+<span><span class="co">#&gt; Execution order: I &gt; plant &gt; reference &gt; sensor &gt; error &gt; Igain &gt; P &gt; controller &gt; actuator</span></span>
+<span><span class="co">#&gt; Zero-crossing functions: 2; events: 0</span></span></code></pre></div>
 <p>The loop
 <code>error -&gt; P -&gt; controller -&gt; actuator -&gt; plant -&gt; sensor -&gt; error</code>
 is closed, yet compilation succeeds. The plant is strictly proper, so

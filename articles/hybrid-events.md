@@ -22,13 +22,15 @@ crossings.
 | `switch`, `relay`, `stop` blocks | root finding | mode changes, termination |
 
 Inside a segment discrete states, held outputs and modes are frozen.
-Kinks inside memoryless blocks (`saturation`, `dead_zone`, `abs`,
-`compare`, `lookup`) have no crossing function in this version; the
-adaptive step control handles them, so put an event on the input when
-the exact time matters. Zero-crossing functions are monitored by the
-root finder of `lsoda` (or `lsode`, `lsodes`, `lsodar`). When a function
-changes sign, the solver stops at the crossing, the event is applied,
-and integration restarts from the new state.
+Kinks of memoryless blocks (the corners of `saturation`, `dead_zone`,
+`abs`, `lookup` and `minmax`, the switching point of `compare`, the
+jumps of `math` with `sign`, `floor`, `ceiling` or `round`) are located
+too: the integrator restarts exactly at each one, silently, without an
+event in the log. Methods without root finding (such as `rk4`) skip
+them. Zero-crossing functions are monitored by the root finder of
+`lsoda` (or `lsode`, `lsodes`, `lsodar`). When a function changes sign,
+the solver stops at the crossing, the event is applied, and integration
+restarts from the new state.
 
 ## The bouncing ball
 
@@ -243,3 +245,21 @@ round-off of, zero. A function whose value at the start of a segment is
 within `zc_tol` of zero is treated as starting at zero, so the same root
 is not detected twice. A crossing in the ignored direction restarts the
 solver without any action.
+
+A function that starts a segment exactly on its level, and was not just
+fired, fires when it moves away in the trigger direction. Here the state
+starts on the level and falls at once:
+
+``` r
+
+saw <- sim_model("saw")
+sim_add_block(saw, "constant", "down", value = -1)
+sim_add_block(saw, "integrator", "x")
+sim_connect(saw, "down", "x")
+sim_add_event(saw, "wrap", sim_zero_crossing("x", "falling"), reset = list(x = "1"))
+sim_events(sim_run(sim_compile(saw), c(0, 2.5)))
+#>   time event          type source direction
+#> 1    0  wrap zero_crossing      x   falling
+#> 2    1  wrap zero_crossing      x   falling
+#> 3    2  wrap zero_crossing      x   falling
+```

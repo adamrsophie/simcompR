@@ -112,6 +112,22 @@ The list returned by `build(p)` may contain:
 - `breakpoints(t0, tf)`: times where the block's output is
   discontinuous; the integrator restarts there.
 
+- `modes(t, x, d, u)`: for switching blocks whose output branch is
+  stored in the discrete state `d` (like `switch` and `relay`), returns
+  the mode for the current inputs. It is called at the start and at
+  every segment boundary, repeatedly until all modes settle, never
+  inside a segment; the crossing functions in `zc` move the mode inside
+  a segment.
+
+- `stop_if(t, x, d, u)`: returns `TRUE` to end the simulation; checked
+  at every boundary and after every event (see the `stop` block).
+
+- `kinks(t, x, d, u)` and `kink_size(in_sizes)`: crossing functions
+  whose zeros are points where a memoryless output or its slope jumps
+  (the corners of a saturation), and their number for the given input
+  sizes. The integrator restarts exactly at each kink; nothing is
+  logged. They are ignored by methods without root finding.
+
 All functions must be free of side effects: the solver calls them at
 trial points that it may later reject.
 

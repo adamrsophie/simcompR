@@ -118,6 +118,23 @@ the whole denominator is one parameter:</p>
 <span>              num <span class="op">=</span> <span class="fu"><a href="../reference/sim_param.html">sim_param</a></span><span class="op">(</span><span class="st">"num"</span><span class="op">)</span>, den <span class="op">=</span> <span class="fu"><a href="../reference/sim_param.html">sim_param</a></span><span class="op">(</span><span class="st">"den"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">second</span>, <span class="st">"u"</span>, <span class="st">"G"</span><span class="op">)</span></span>
 <span><span class="va">plan</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">second</span><span class="op">)</span></span></code></pre></div>
+<p>Parameters can be combined where they are used. Writing the system
+with <span class="math inline">\zeta</span> and <span class="math inline">\omega</span> as parameters keeps the denominator in
+its textbook form; the expression is evaluated again for every run:</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">named</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"second_order_zw"</span>, params <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>zeta <span class="op">=</span> <span class="fl">0.2</span>, w <span class="op">=</span> <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">named</span>, <span class="st">"step"</span>, <span class="st">"u"</span>, time <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">named</span>, <span class="st">"transfer_function"</span>, <span class="st">"G"</span>,</span>
+<span>              num <span class="op">=</span> <span class="fu"><a href="../reference/sim_param.html">sim_param</a></span><span class="op">(</span><span class="st">"w"</span><span class="op">)</span><span class="op">^</span><span class="fl">2</span>,</span>
+<span>              den <span class="op">=</span> <span class="fu"><a href="../reference/sim_param.html">sim_param_expr</a></span><span class="op">(</span><span class="st">"c(1, 2 * zeta * w, w^2)"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">named</span>, <span class="st">"u"</span>, <span class="st">"G"</span><span class="op">)</span></span>
+<span><span class="va">zw</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">named</span><span class="op">)</span></span>
+<span><span class="va">peak_of</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">p</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_signal.html">sim_signal</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="va">p</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">15</span><span class="op">)</span>, times <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">15</span>, <span class="fl">0.01</span><span class="op">)</span><span class="op">)</span>, <span class="st">"G"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>zeta_0.2 <span class="op">=</span> <span class="fu">peak_of</span><span class="op">(</span><span class="va">zw</span><span class="op">)</span>, zeta_0.5 <span class="op">=</span> <span class="fu">peak_of</span><span class="op">(</span><span class="fu"><a href="../reference/sim_set_params.html">sim_set_params</a></span><span class="op">(</span><span class="va">zw</span>, zeta <span class="op">=</span> <span class="fl">0.5</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; zeta_0.2 zeta_0.5 </span></span>
+<span><span class="co">#&gt; 1.526610 1.163029</span></span></code></pre></div>
+<p>Model parameters are also visible by name inside
+<code>expression</code> blocks and state machine guards and actions.</p>
 </div>
 <div class="section level2">
 <h2 id="sweeps">Sweeps<a class="anchor" aria-label="anchor" href="#sweeps"></a>
@@ -125,7 +142,7 @@ the whole denominator is one parameter:</p>
 <p><code><a href="../reference/sim_sweep.html">sim_sweep()</a></code> takes a data frame with one row per run, or
 a list of named lists for vector-valued parameters. <code>summary</code>
 reduces each result to named numbers.</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">dens</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.1</span>, <span class="fl">0.3</span>, <span class="fl">0.7</span>, <span class="fl">1</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">z</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>den <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span> <span class="op">*</span> <span class="va">z</span> <span class="op">*</span> <span class="fl">2</span>, <span class="fl">4</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">peak</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">r</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">y</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_signal.html">sim_signal</a></span><span class="op">(</span><span class="va">r</span>, <span class="st">"G"</span><span class="op">)</span></span>
@@ -149,12 +166,12 @@ reduces each result to named numbers.</p>
 <span><span class="co">#&gt; 3  0.7 1.045988   2.98   1.045988</span></span>
 <span><span class="co">#&gt; 4  1.0 1.000000   2.91   1.000000</span></span></code></pre></div>
 <p>The overshoot matches the classical formula <span class="math inline">1 + e^{-\pi\zeta/\sqrt{1-\zeta^2}}</span>.</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cols</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_along</a></span><span class="op">(</span><span class="va">s</span><span class="op">$</span><span class="va">results</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/matplot.html" class="external-link">matplot</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_signal.html">sim_times</a></span><span class="op">(</span><span class="va">s</span><span class="op">$</span><span class="va">results</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">sapply</a></span><span class="op">(</span><span class="va">s</span><span class="op">$</span><span class="va">results</span>, <span class="va">sim_signal</span>, <span class="st">"G"</span><span class="op">)</span>,</span>
 <span>        type <span class="op">=</span> <span class="st">"l"</span>, lty <span class="op">=</span> <span class="fl">1</span>, col <span class="op">=</span> <span class="va">cols</span>, xlab <span class="op">=</span> <span class="st">"time"</span>, ylab <span class="op">=</span> <span class="st">"G"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/legend.html" class="external-link">legend</a></span><span class="op">(</span><span class="st">"topright"</span>, <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="st">"zeta ="</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.1</span>, <span class="fl">0.3</span>, <span class="fl">0.7</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span>, col <span class="op">=</span> <span class="va">cols</span>, lty <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></code></pre></div>
-<p><img src="experiments_files/figure-html/unnamed-chunk-5-1.png" class="r-plt" alt="" width="672"></p>
+<p><img src="experiments_files/figure-html/unnamed-chunk-6-1.png" class="r-plt" alt="" width="672"></p>
 <div class="section level3">
 <h3 id="reuse-of-the-compiled-structure">Reuse of the compiled structure<a class="anchor" aria-label="anchor" href="#reuse-of-the-compiled-structure"></a>
 </h3>
@@ -171,7 +188,7 @@ analysis automatically.</p>
 <p><code><a href="../reference/sim_sweep.html">sim_monte_carlo()</a></code> draws parameter sets under a fixed
 seed. The caller’s random stream is saved and restored, so the
 experiment is reproducible and does not disturb other random code:</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">2024</span><span class="op">)</span></span>
 <span><span class="va">before</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Uniform.html" class="external-link">runif</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">2024</span><span class="op">)</span></span>
@@ -186,7 +203,7 @@ experiment is reproducible and does not disturb other random code:</p>
 <span><span class="co">#&gt;    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. </span></span>
 <span><span class="co">#&gt;   1.002   1.043   1.126   1.198   1.277   1.704</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/hist.html" class="external-link">hist</a></span><span class="op">(</span><span class="va">mc</span><span class="op">$</span><span class="va">summary</span><span class="op">$</span><span class="va">peak</span>, main <span class="op">=</span> <span class="st">"Peak response"</span>, xlab <span class="op">=</span> <span class="st">"peak"</span><span class="op">)</span></span></code></pre></div>
-<p><img src="experiments_files/figure-html/unnamed-chunk-6-1.png" class="r-plt" alt="" width="672"></p>
+<p><img src="experiments_files/figure-html/unnamed-chunk-7-1.png" class="r-plt" alt="" width="672"></p>
 <p>Running it again with the same seed returns identical numbers.</p>
 </div>
 <div class="section level2">
@@ -195,7 +212,7 @@ experiment is reproducible and does not disturb other random code:</p>
 <p><code>white_noise</code> blocks draw a value at each sample hit from
 their own seed and the hit index. Results are reproducible and
 independent of the global random state:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">nm</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"noisy"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">nm</span>, <span class="st">"white_noise"</span>, <span class="st">"w"</span>, sd <span class="op">=</span> <span class="fl">0.2</span>, period <span class="op">=</span> <span class="fl">0.05</span>, seed <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">nm</span>, <span class="st">"transfer_function"</span>, <span class="st">"filter"</span>, num <span class="op">=</span> <span class="fl">1</span>, den <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.5</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
@@ -205,7 +222,7 @@ independent of the global random state:</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">r1</span><span class="op">$</span><span class="va">signals</span>, <span class="va">r2</span><span class="op">$</span><span class="va">signals</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] TRUE</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">r1</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"w"</span>, <span class="st">"filter"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<p><img src="experiments_files/figure-html/unnamed-chunk-7-1.png" class="r-plt" alt="" width="672"></p>
+<p><img src="experiments_files/figure-html/unnamed-chunk-8-1.png" class="r-plt" alt="" width="672"></p>
 </div>
 <div class="section level2">
 <h2 id="failures-inside-experiments">Failures inside experiments<a class="anchor" aria-label="anchor" href="#failures-inside-experiments"></a>

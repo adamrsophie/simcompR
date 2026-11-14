@@ -30,6 +30,9 @@ with:
 | `update` | `function(t, x, d, u)` returning the next discrete state |
 | `held0` | `function(size, d0)` giving held outputs before the first hit |
 | `zc`, `on_zc`, `zc_direction` | zero-crossing functions and handlers |
+| `modes` | `function(t, x, d, u)` giving the mode (stored in `d`) for the current inputs |
+| `stop_if` | `function(t, x, d, u)` returning `TRUE` to end the run |
+| `kinks`, `kink_size` | crossing functions at kinks of a memoryless output, and their number |
 | `breakpoints` | times where the block’s output is discontinuous |
 
 `u` is a list with one numeric vector per input port. `output` must be
@@ -122,6 +125,43 @@ sim_signal(sim_run(sim_compile(ma), c(0, 5), times = 0:5), "avg")
 #> [1] 0.0000000 0.3333333 1.0000000 2.0000000 3.0000000 4.0000000
 ```
 
+## Kinks and modes
+
+A memoryless block whose output, or its slope, jumps at some input
+values should declare those points with `kinks`, so the integrator
+restarts there instead of stepping across the corner. Here a soft
+limiter is linear up to 1 in magnitude and flat beyond:
+
+``` r
+
+sim_register_block_type(
+  "limiter", overwrite = TRUE, category = "user",
+  description = "Clamp to [-1, 1] with located kinks",
+  build = function(p) list(
+    inputs = NA, outputs = NA, feedthrough = TRUE,
+    size_out = function(n) n,
+    output = function(t, x, d, u) pmin(pmax(u[[1]], -1), 1),
+    kinks = function(t, x, d, u) c(u[[1]] - 1, u[[1]] + 1),
+    kink_size = function(n) 2 * n[[1]]))
+lm <- sim_model("limited")
+sim_add_block(lm, "sine", "u", amplitude = 2)
+sim_add_block(lm, "limiter", "l")
+sim_add_block(lm, "integrator", "x")
+sim_connect(lm, "u", "l")
+sim_connect(lm, "l", "x")
+r <- sim_run(sim_compile(lm), c(0, 2 * pi), times = 2 * pi,
+             rtol = 1e-10, atol = 1e-12)
+sim_signal(r, "x")   # zero over a full period
+#>            x 
+#> 1.606904e-09
+```
+
+A block whose output switches between branches keeps the branch in a
+discrete state, returns it from `modes` (called at boundaries until all
+modes settle) and moves it at located crossings with `zc` and `on_zc`;
+see the built-in `switch` and `relay` blocks. `stop_if` ends the run, as
+the `stop` block does.
+
 ## Portability
 
 Block types whose parameters are plain values can be saved to JSON (see
@@ -171,8 +211,9 @@ head(sim_block_types(), 10)
 #> 9      num, den, initial, period, offset
 #> 10
 subset(sim_block_types(), category == "user")
-#>               type category         description     parameters
-#> 5     deadband_abs     user max(|u| - width, 0)          width
-#> 19         lowpass     user                       tau, initial
-#> 22 moving_average3     user                     period, offset
+#>               type category                         description     parameters
+#> 5     deadband_abs     user                 max(|u| - width, 0)          width
+#> 17         limiter     user Clamp to [-1, 1] with located kinks               
+#> 20         lowpass     user                                       tau, initial
+#> 23 moving_average3     user                                     period, offset
 ```

@@ -26,6 +26,28 @@ sim_connect(second, "u", "G")
 plan <- sim_compile(second)
 ```
 
+Parameters can be combined where they are used. Writing the system with
+\zeta and \omega as parameters keeps the denominator in its textbook
+form; the expression is evaluated again for every run:
+
+``` r
+
+named <- sim_model("second_order_zw", params = list(zeta = 0.2, w = 2))
+sim_add_block(named, "step", "u", time = 0)
+sim_add_block(named, "transfer_function", "G",
+              num = sim_param("w")^2,
+              den = sim_param_expr("c(1, 2 * zeta * w, w^2)"))
+sim_connect(named, "u", "G")
+zw <- sim_compile(named)
+peak_of <- function(p) max(sim_signal(sim_run(p, c(0, 15), times = seq(0, 15, 0.01)), "G"))
+c(zeta_0.2 = peak_of(zw), zeta_0.5 = peak_of(sim_set_params(zw, zeta = 0.5)))
+#> zeta_0.2 zeta_0.5 
+#> 1.526610 1.163029
+```
+
+Model parameters are also visible by name inside `expression` blocks and
+state machine guards and actions.
+
 ## Sweeps
 
 [`sim_sweep()`](https://adamrsophie.github.io/simcompR/reference/sim_sweep.md)
@@ -70,7 +92,7 @@ matplot(sim_times(s$results[[1]]), sapply(s$results, sim_signal, "G"),
 legend("topright", paste("zeta =", c(0.1, 0.3, 0.7, 1)), col = cols, lty = 1)
 ```
 
-![](experiments_files/figure-html/unnamed-chunk-5-1.png)
+![](experiments_files/figure-html/unnamed-chunk-6-1.png)
 
 ### Reuse of the compiled structure
 
@@ -106,7 +128,7 @@ summary(mc$summary$peak)
 hist(mc$summary$peak, main = "Peak response", xlab = "peak")
 ```
 
-![](experiments_files/figure-html/unnamed-chunk-6-1.png)
+![](experiments_files/figure-html/unnamed-chunk-7-1.png)
 
 Running it again with the same seed returns identical numbers.
 
@@ -129,7 +151,7 @@ identical(r1$signals, r2$signals)
 plot(r1, c("w", "filter"))
 ```
 
-![](experiments_files/figure-html/unnamed-chunk-7-1.png)
+![](experiments_files/figure-html/unnamed-chunk-8-1.png)
 
 ## Failures inside experiments
 

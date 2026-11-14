@@ -127,7 +127,8 @@ Outputs are computed after the transition, which means the outputs at a
 hit depend on the inputs at the same hit (direct feedthrough).</p>
 <p>Guards and actions are portable strings or R functions. A guard string
 is an expression in <code>u</code> (the input vector), <code>t</code>, <code>elapsed</code> (time in the
-current state) and the data variables. An action string assigns data
+current state), the data variables and the parameters of the enclosing
+model or subsystem. An action string assigns data
 variables, for example <code>"count &lt;- count + 1"</code>. A guard function has
 signature <code>function(u, t, elapsed, data)</code> and returns <code>TRUE</code> or <code>FALSE</code>;
 an action function has signature <code>function(data, u, t)</code> and returns the

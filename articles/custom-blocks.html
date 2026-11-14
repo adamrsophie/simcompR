@@ -187,6 +187,25 @@ hit</td>
 <td>zero-crossing functions and handlers</td>
 </tr>
 <tr class="odd">
+<td><code>modes</code></td>
+<td>
+<code>function(t, x, d, u)</code> giving the mode (stored in
+<code>d</code>) for the current inputs</td>
+</tr>
+<tr class="even">
+<td><code>stop_if</code></td>
+<td>
+<code>function(t, x, d, u)</code> returning <code>TRUE</code> to end
+the run</td>
+</tr>
+<tr class="odd">
+<td>
+<code>kinks</code>, <code>kink_size</code>
+</td>
+<td>crossing functions at kinks of a memoryless output, and their
+number</td>
+</tr>
+<tr class="even">
 <td><code>breakpoints</code></td>
 <td>times where the block’s output is discontinuous</td>
 </tr>
@@ -276,6 +295,41 @@ the previous two inputs:</p>
 <span><span class="co">#&gt; [1] 0.0000000 0.3333333 1.0000000 2.0000000 3.0000000 4.0000000</span></span></code></pre></div>
 </div>
 <div class="section level2">
+<h2 id="kinks-and-modes">Kinks and modes<a class="anchor" aria-label="anchor" href="#kinks-and-modes"></a>
+</h2>
+<p>A memoryless block whose output, or its slope, jumps at some input
+values should declare those points with <code>kinks</code>, so the
+integrator restarts there instead of stepping across the corner. Here a
+soft limiter is linear up to 1 in magnitude and flat beyond:</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/sim_register_block_type.html">sim_register_block_type</a></span><span class="op">(</span></span>
+<span>  <span class="st">"limiter"</span>, overwrite <span class="op">=</span> <span class="cn">TRUE</span>, category <span class="op">=</span> <span class="st">"user"</span>,</span>
+<span>  description <span class="op">=</span> <span class="st">"Clamp to [-1, 1] with located kinks"</span>,</span>
+<span>  build <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">p</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    inputs <span class="op">=</span> <span class="cn">NA</span>, outputs <span class="op">=</span> <span class="cn">NA</span>, feedthrough <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>    size_out <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">n</span><span class="op">)</span> <span class="va">n</span>,</span>
+<span>    output <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">t</span>, <span class="va">x</span>, <span class="va">d</span>, <span class="va">u</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">pmin</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">pmax</a></span><span class="op">(</span><span class="va">u</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span>, <span class="op">-</span><span class="fl">1</span><span class="op">)</span>, <span class="fl">1</span><span class="op">)</span>,</span>
+<span>    kinks <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">t</span>, <span class="va">x</span>, <span class="va">d</span>, <span class="va">u</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">u</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span> <span class="op">-</span> <span class="fl">1</span>, <span class="va">u</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span> <span class="op">+</span> <span class="fl">1</span><span class="op">)</span>,</span>
+<span>    kink_size <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">n</span><span class="op">)</span> <span class="fl">2</span> <span class="op">*</span> <span class="va">n</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">lm</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"limited"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">lm</span>, <span class="st">"sine"</span>, <span class="st">"u"</span>, amplitude <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">lm</span>, <span class="st">"limiter"</span>, <span class="st">"l"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">lm</span>, <span class="st">"integrator"</span>, <span class="st">"x"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">lm</span>, <span class="st">"u"</span>, <span class="st">"l"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">lm</span>, <span class="st">"l"</span>, <span class="st">"x"</span><span class="op">)</span></span>
+<span><span class="va">r</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">lm</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">2</span> <span class="op">*</span> <span class="va">pi</span><span class="op">)</span>, times <span class="op">=</span> <span class="fl">2</span> <span class="op">*</span> <span class="va">pi</span>,</span>
+<span>             rtol <span class="op">=</span> <span class="fl">1e-10</span>, atol <span class="op">=</span> <span class="fl">1e-12</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_signal.html">sim_signal</a></span><span class="op">(</span><span class="va">r</span>, <span class="st">"x"</span><span class="op">)</span>   <span class="co"># zero over a full period</span></span>
+<span><span class="co">#&gt;            x </span></span>
+<span><span class="co">#&gt; 1.606904e-09</span></span></code></pre></div>
+<p>A block whose output switches between branches keeps the branch in a
+discrete state, returns it from <code>modes</code> (called at boundaries
+until all modes settle) and moves it at located crossings with
+<code>zc</code> and <code>on_zc</code>; see the built-in
+<code>switch</code> and <code>relay</code> blocks. <code>stop_if</code>
+ends the run, as the <code>stop</code> block does.</p>
+</div>
+<div class="section level2">
 <h2 id="portability">Portability<a class="anchor" aria-label="anchor" href="#portability"></a>
 </h2>
 <p>Block types whose parameters are plain values can be saved to JSON
@@ -288,7 +342,7 @@ the same name, in any session that reads the file.</p>
 <div class="section level2">
 <h2 id="listing-types">Listing types<a class="anchor" aria-label="anchor" href="#listing-types"></a>
 </h2>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_block_types.html">sim_block_types</a></span><span class="op">(</span><span class="op">)</span>, <span class="fl">10</span><span class="op">)</span></span>
 <span><span class="co">#&gt;                          type category</span></span>
 <span><span class="co">#&gt; 1                         abs     math</span></span>
@@ -324,10 +378,11 @@ the same name, in any session that reads the file.</p>
 <span><span class="co">#&gt; 9      num, den, initial, period, offset</span></span>
 <span><span class="co">#&gt; 10</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_block_types.html">sim_block_types</a></span><span class="op">(</span><span class="op">)</span>, <span class="va">category</span> <span class="op">==</span> <span class="st">"user"</span><span class="op">)</span></span>
-<span><span class="co">#&gt;               type category         description     parameters</span></span>
-<span><span class="co">#&gt; 5     deadband_abs     user max(|u| - width, 0)          width</span></span>
-<span><span class="co">#&gt; 19         lowpass     user                       tau, initial</span></span>
-<span><span class="co">#&gt; 22 moving_average3     user                     period, offset</span></span></code></pre></div>
+<span><span class="co">#&gt;               type category                         description     parameters</span></span>
+<span><span class="co">#&gt; 5     deadband_abs     user                 max(|u| - width, 0)          width</span></span>
+<span><span class="co">#&gt; 17         limiter     user Clamp to [-1, 1] with located kinks               </span></span>
+<span><span class="co">#&gt; 20         lowpass     user                                       tau, initial</span></span>
+<span><span class="co">#&gt; 23 moving_average3     user                                     period, offset</span></span></code></pre></div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

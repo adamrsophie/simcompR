@@ -183,23 +183,39 @@ value:</p>
 <span><span class="co">#&gt;  2</span></span></code></pre></div>
 </div>
 <div class="section level2">
+<h2 id="events-on-inner-blocks">Events on inner blocks<a class="anchor" aria-label="anchor" href="#events-on-inner-blocks"></a>
+</h2>
+<p>A top-level event refers to a block inside an instance by its path,
+<code>"instance/block"</code>. Here the state of the inner lag of
+<code>weak</code> is cleared at t = 1:</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">ev</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_copy.html">sim_copy</a></span><span class="op">(</span><span class="va">m</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_event.html">sim_add_event</a></span><span class="op">(</span><span class="va">ev</span>, <span class="st">"clear"</span>, <span class="fu"><a href="../reference/sim_add_event.html">sim_at</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>, reset <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>`weak/lag` <span class="op">=</span> <span class="st">"0"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">r</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">ev</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">2</span><span class="op">)</span>, times <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.99</span>, <span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_signal.html">sim_signal</a></span><span class="op">(</span><span class="va">r</span>, <span class="st">"weak"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 0.2573648 0.2597791 0.0000000 0.3160601</span></span></code></pre></div>
+<p>Instance <code>params</code> must name parameters of the subsystem or
+names that its blocks refer to; a misspelled name is an error, not a
+silently ignored value.</p>
+</div>
+<div class="section level2">
 <h2 id="no-shared-state">No shared state<a class="anchor" aria-label="anchor" href="#no-shared-state"></a>
 </h2>
 <p>Each instance gets its own copy of the inner blocks, so instances
 never share state. Changing the initial state of one does not affect the
 other:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">r</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="va">plan</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>, times <span class="op">=</span> <span class="fl">1</span>, initial <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>`weak/lag` <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_signal.html">sim_signal</a></span><span class="op">(</span><span class="va">r</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"weak"</span>, <span class="st">"strong"</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt;      weak    strong </span></span>
-<span><span class="co">#&gt; 0.6276589 1.5586739</span></span></code></pre></div>
+<span><span class="co">#&gt;     weak   strong </span></span>
+<span><span class="co">#&gt; 0.627659 1.558673</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="nesting">Nesting<a class="anchor" aria-label="anchor" href="#nesting"></a>
 </h2>
 <p>Subsystems can contain subsystems. Two actuators in series inside a
 “drive train”:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">train</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_subsystem.html">sim_subsystem</a></span><span class="op">(</span><span class="st">"train"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">train</span>, <span class="st">"inport"</span>, <span class="st">"in"</span>, index <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">train</span>, <span class="st">"subsystem"</span>, <span class="st">"first"</span>, system <span class="op">=</span> <span class="va">actuator</span><span class="op">)</span></span>
@@ -229,7 +245,7 @@ every release.</p>
 <h2 id="diagnostics-with-paths">Diagnostics with paths<a class="anchor" aria-label="anchor" href="#diagnostics-with-paths"></a>
 </h2>
 <p>Errors inside an instance name the full path:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">broken</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_subsystem.html">sim_subsystem</a></span><span class="op">(</span><span class="st">"broken"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">broken</span>, <span class="st">"inport"</span>, <span class="st">"u"</span>, index <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">broken</span>, <span class="st">"gain"</span>, <span class="st">"k"</span>, gain <span class="op">=</span> <span class="fu"><a href="../reference/sim_param.html">sim_param</a></span><span class="op">(</span><span class="st">"missing"</span><span class="op">)</span><span class="op">)</span></span>

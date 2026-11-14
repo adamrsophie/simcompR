@@ -77,7 +77,8 @@ sim_plan in these stages:"><meta property="og:image" content="https://adamrsophi
 <span>  <span class="va">model</span>,</span>
 <span>  algebraic_loops <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"error"</span>, <span class="st">"solve"</span><span class="op">)</span>,</span>
 <span>  loop_tol <span class="op">=</span> <span class="fl">1e-10</span>,</span>
-<span>  loop_maxit <span class="op">=</span> <span class="fl">50</span></span>
+<span>  loop_maxit <span class="op">=</span> <span class="fl">50</span>,</span>
+<span>  loop_guess <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -99,6 +100,12 @@ sim_plan in these stages:"><meta property="og:image" content="https://adamrsophi
 
 <dt id="arg-loop-maxit">loop_maxit<a class="anchor" aria-label="anchor" href="#arg-loop-maxit"></a></dt>
 <dd><p>Maximum Newton iterations per loop solve.</p></dd>
+
+
+<dt id="arg-loop-guess">loop_guess<a class="anchor" aria-label="anchor" href="#arg-loop-guess"></a></dt>
+<dd><p>Optional named list of starting values for loop
+solving, keyed by signal name (as in <code><a href="sim_signal.html">sim_signal()</a></code>); each value has
+the length of that signal.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -129,7 +136,11 @@ collect sample times, zero-crossing functions and events.</p></li>
 </ol><p>Algebraic loops are rejected by default. With <code>algebraic_loops = "solve"</code>
 each loop is solved at every evaluation by Newton iterations on the loop
 outputs, with a finite-difference Jacobian and backtracking; the run
-fails with an error when the residual does not fall below <code>loop_tol</code>.</p>
+fails with an error when the residual does not fall below <code>loop_tol</code>.
+Every solve starts from <code>loop_guess</code> where given and from zero
+otherwise, so results never depend on the history of solver trial
+points. A loop with several solutions (for example <code>y = 4 / y</code>) is
+steered to one of them by its starting value.</p>
     </div>
 
     <div class="section level2">

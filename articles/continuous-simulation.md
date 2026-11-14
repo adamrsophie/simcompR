@@ -182,6 +182,23 @@ plot(r, "N")
 
 ![](continuous-simulation_files/figure-html/unnamed-chunk-9-1.png)
 
+With `n_inputs = 0` an `ode` block is autonomous, so a system such as
+the Lorenz equations needs no dummy input:
+
+``` r
+
+lz <- sim_model("lorenz")
+sim_add_block(lz, "ode", "xyz", n_inputs = 0, initial = c(1, 1, 1),
+              deriv = function(t, x, u) c(10 * (x[2] - x[1]),
+                                          x[1] * (28 - x[3]) - x[2],
+                                          x[1] * x[2] - 8 / 3 * x[3]))
+r <- sim_run(sim_compile(lz), c(0, 20), times = seq(0, 20, by = 0.01))
+xyz <- sim_signal(r, "xyz")
+plot(xyz[, 1], xyz[, 3], type = "l", xlab = "x", ylab = "z")
+```
+
+![](continuous-simulation_files/figure-html/unnamed-chunk-10-1.png)
+
 `ode` and `fcn` blocks hold R closures; they cannot be saved to portable
 JSON files (see
 [`vignette("model-files")`](https://adamrsophie.github.io/simcompR/articles/model-files.md)).

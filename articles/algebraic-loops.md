@@ -98,8 +98,36 @@ sim_connect(bad, "one", "s", input = 1)
 sim_connect(bad, "s", "s", input = 2)
 sim_run(sim_compile(bad, algebraic_loops = "solve"), c(0, 1))
 #> Error:
-#> ! Simulation failed at t = 0: Algebraic loop {s} at t = 0: singular Jacobian, the loop has no unique solution.
+#> ! Simulation failed at t = 0: Algebraic loop {s} at t = 0: singular Jacobian at the current iterate. The loop may have no unique solution, or the start is at a stationary point; give a starting value with sim_compile(loop_guess = ).
 ```
+
+### Several solutions and starting values
+
+y = 4 / y has the solutions 2 and -2. Newton’s method started from zero
+cannot move (the residual is not even defined there), so the run fails
+and says how to fix it. A starting value given with `loop_guess` selects
+the solution:
+
+``` r
+
+two <- sim_model("two_roots")
+sim_add_block(two, "constant", "four", value = 4)
+sim_add_block(two, "divide", "y")
+sim_connect(two, "four", "y", input = 1)
+sim_connect(two, "y", "y", input = 2)
+sim_run(sim_compile(two, algebraic_loops = "solve"), c(0, 1), times = 1)
+#> Error:
+#> ! Simulation failed at t = 0: Algebraic loop {y} at t = 0: the residual is not finite (NaN or infinite) at the starting point; give a starting value with sim_compile(loop_guess = ).
+pos <- sim_compile(two, algebraic_loops = "solve", loop_guess = list(y = 1))
+neg <- sim_compile(two, algebraic_loops = "solve", loop_guess = list(y = -1))
+c(sim_signal(sim_run(pos, c(0, 1), times = 1), "y"),
+  sim_signal(sim_run(neg, c(0, 1), times = 1), "y"))
+#>  y  y 
+#>  2 -2
+```
+
+Every solve starts from the same value, so results never depend on the
+history of the solver’s trial points.
 
 ## Loops inside dynamics
 
@@ -138,7 +166,8 @@ is analyzed again, so a new loop is never missed. See
 
 - Loop solving uses a dense finite-difference Jacobian; it is meant for
   small loops.
-- Switching blocks inside a loop keep the mode they had at the start of
-  the segment.
+- Switching blocks inside a loop take their mode from the solved signals
+  at every segment boundary (repeated until the modes settle) and keep
+  it inside the segment, where their crossing functions locate changes.
 - Consistent initialization of differential-algebraic systems is not
   covered here; see the roadmap.

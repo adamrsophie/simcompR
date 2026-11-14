@@ -15,6 +15,8 @@ sim_add_event(
   priority = 0
 )
 
+sim_remove_event(model, name)
+
 sim_zero_crossing(
   signal,
   direction = "either",
@@ -35,7 +37,7 @@ sim_at(times)
 
 - name:
 
-  Unique event name.
+  Unique event name; for `sim_remove_event()`, the event to remove.
 
 - trigger:
 
@@ -79,8 +81,8 @@ sim_at(times)
 
 ## Value
 
-`sim_add_event()` returns the model invisibly; the trigger constructors
-return trigger objects.
+`sim_add_event()` and `sim_remove_event()` return the model invisibly;
+the trigger constructors return trigger objects.
 
 ## Details
 
@@ -101,6 +103,12 @@ of all block outputs at the event time (before the reset), and `t` is
 the time. Model parameters are also visible in string expressions. Only
 string resets can be saved with
 [`sim_write_json()`](https://adamrsophie.github.io/simcompR/reference/sim_write_json.md).
+
+A `signal` or reset target inside a subsystem instance is written as a
+path, `"instance/block"` (deeper levels add more `/` parts). A crossing
+whose function is exactly at `level` when a segment starts fires there
+when the signal moves away in the trigger direction (unless the same
+event has just fired at that instant).
 
 When several events fire at the same instant they are applied in
 increasing `priority`, then by name. Every reset sees the state left by

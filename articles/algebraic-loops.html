@@ -185,7 +185,32 @@ explanation:</p>
 <span><span class="fu"><a href="../reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">bad</span>, <span class="st">"s"</span>, <span class="st">"s"</span>, input <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">bad</span>, algebraic_loops <span class="op">=</span> <span class="st">"solve"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; <span style="color: #BBBB00; font-weight: bold;">Error</span><span style="font-weight: bold;">:</span></span></span>
-<span><span class="co">#&gt; <span style="color: #BBBB00;">!</span> Simulation failed at t = 0: Algebraic loop {s} at t = 0: singular Jacobian, the loop has no unique solution.</span></span></code></pre></div>
+<span><span class="co">#&gt; <span style="color: #BBBB00;">!</span> Simulation failed at t = 0: Algebraic loop {s} at t = 0: singular Jacobian at the current iterate. The loop may have no unique solution, or the start is at a stationary point; give a starting value with sim_compile(loop_guess = ).</span></span></code></pre></div>
+</div>
+<div class="section level3">
+<h3 id="several-solutions-and-starting-values">Several solutions and starting values<a class="anchor" aria-label="anchor" href="#several-solutions-and-starting-values"></a>
+</h3>
+<p><span class="math inline">y = 4 / y</span> has the solutions <span class="math inline">2</span> and <span class="math inline">-2</span>.
+Newton’s method started from zero cannot move (the residual is not even
+defined there), so the run fails and says how to fix it. A starting
+value given with <code>loop_guess</code> selects the solution:</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">two</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"two_roots"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">two</span>, <span class="st">"constant"</span>, <span class="st">"four"</span>, value <span class="op">=</span> <span class="fl">4</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">two</span>, <span class="st">"divide"</span>, <span class="st">"y"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">two</span>, <span class="st">"four"</span>, <span class="st">"y"</span>, input <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">two</span>, <span class="st">"y"</span>, <span class="st">"y"</span>, input <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">two</span>, algebraic_loops <span class="op">=</span> <span class="st">"solve"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>, times <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00; font-weight: bold;">Error</span><span style="font-weight: bold;">:</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00;">!</span> Simulation failed at t = 0: Algebraic loop {y} at t = 0: the residual is not finite (NaN or infinite) at the starting point; give a starting value with sim_compile(loop_guess = ).</span></span>
+<span><span class="va">pos</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">two</span>, algebraic_loops <span class="op">=</span> <span class="st">"solve"</span>, loop_guess <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>y <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">neg</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">two</span>, algebraic_loops <span class="op">=</span> <span class="st">"solve"</span>, loop_guess <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>y <span class="op">=</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_signal.html">sim_signal</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="va">pos</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>, times <span class="op">=</span> <span class="fl">1</span><span class="op">)</span>, <span class="st">"y"</span><span class="op">)</span>,</span>
+<span>  <span class="fu"><a href="../reference/sim_signal.html">sim_signal</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="va">neg</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>, times <span class="op">=</span> <span class="fl">1</span><span class="op">)</span>, <span class="st">"y"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt;  y  y </span></span>
+<span><span class="co">#&gt;  2 -2</span></span></code></pre></div>
+<p>Every solve starts from the same value, so results never depend on
+the history of the solver’s trial points.</p>
 </div>
 </div>
 <div class="section level2">
@@ -193,7 +218,7 @@ explanation:</p>
 </h2>
 <p>Loops can sit inside a continuous model. Here <span class="math inline">\dot x = s</span> with <span class="math inline">s =
 -x - s</span>, so <span class="math inline">\dot x = -x/2</span>:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">dyn</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"dynamic_loop"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">dyn</span>, <span class="st">"integrator"</span>, <span class="st">"x"</span>, initial <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">dyn</span>, <span class="st">"sum"</span>, <span class="st">"s"</span>, signs <span class="op">=</span> <span class="st">"--"</span><span class="op">)</span></span>
@@ -225,8 +250,10 @@ new loop is never missed. See <code><a href="../articles/compilation.html">vigne
 <ul>
 <li>Loop solving uses a dense finite-difference Jacobian; it is meant
 for small loops.</li>
-<li>Switching blocks inside a loop keep the mode they had at the start
-of the segment.</li>
+<li>Switching blocks inside a loop take their mode from the solved
+signals at every segment boundary (repeated until the modes settle) and
+keep it inside the segment, where their crossing functions locate
+changes.</li>
 <li>Consistent initialization of differential-algebraic systems is not
 covered here; see the roadmap.</li>
 </ul>

@@ -94,6 +94,7 @@ Encoded values:
 | `{"$matrix": {"nrow": 2, "ncol": 2, "data": [...]}}` | numeric matrix |
 | `{"$chr": [...]}`, `{"$lgl": [...]}`, `{"$list": [...]}` | other vectors and lists |
 | `{"$param": "k"}` | `sim_param("k")` |
+| `{"$param_expr": "-k / 2"}` | `-sim_param("k") / 2`, a parameter expression |
 | `{"$model": {...}}` | nested subsystem |
 | `{"$transition": {...}}` | [`sim_transition()`](https://adamrsophie.github.io/simcompR/reference/sim_transition.md) |
 

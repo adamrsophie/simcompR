@@ -19,6 +19,7 @@
 - [`sim_copy()`](https://adamrsophie.github.io/simcompR/reference/sim_copy.md)
   : Copy a model
 - [`sim_param()`](https://adamrsophie.github.io/simcompR/reference/sim_param.md)
+  [`sim_param_expr()`](https://adamrsophie.github.io/simcompR/reference/sim_param.md)
   : Refer to a model or subsystem parameter
 - [`sim_block_types()`](https://adamrsophie.github.io/simcompR/reference/sim_block_types.md)
   : List registered block types
@@ -28,6 +29,7 @@
 - [`sim_subsystem()`](https://adamrsophie.github.io/simcompR/reference/sim_subsystem.md)
   : Hierarchical subsystems
 - [`sim_add_event()`](https://adamrsophie.github.io/simcompR/reference/sim_add_event.md)
+  [`sim_remove_event()`](https://adamrsophie.github.io/simcompR/reference/sim_add_event.md)
   [`sim_zero_crossing()`](https://adamrsophie.github.io/simcompR/reference/sim_add_event.md)
   [`sim_at()`](https://adamrsophie.github.io/simcompR/reference/sim_add_event.md)
   : Model events: zero crossings, scheduled times and state resets

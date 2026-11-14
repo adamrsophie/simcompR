@@ -97,6 +97,25 @@ sim_signal(sim_run(sim_set_params(p, G = 5), c(0, 20), times = 20), "a1")
 #>  2
 ```
 
+## Events on inner blocks
+
+A top-level event refers to a block inside an instance by its path,
+`"instance/block"`. Here the state of the inner lag of `weak` is cleared
+at t = 1:
+
+``` r
+
+ev <- sim_copy(m)
+sim_add_event(ev, "clear", sim_at(1), reset = list(`weak/lag` = "0"))
+r <- sim_run(sim_compile(ev), c(0, 2), times = c(0.99, 1, 2))
+sim_signal(r, "weak")
+#> [1] 0.2573648 0.2597791 0.0000000 0.3160601
+```
+
+Instance `params` must name parameters of the subsystem or names that
+its blocks refer to; a misspelled name is an error, not a silently
+ignored value.
+
 ## No shared state
 
 Each instance gets its own copy of the inner blocks, so instances never
@@ -107,8 +126,8 @@ other:
 
 r <- sim_run(plan, c(0, 1), times = 1, initial = list(`weak/lag` = 1))
 sim_signal(r, c("weak", "strong"))
-#>      weak    strong 
-#> 0.6276589 1.5586739
+#>     weak   strong 
+#> 0.627659 1.558673
 ```
 
 ## Nesting
