@@ -58,13 +58,6 @@ jobs:
           cat simcompR.Rcheck/00check.log
         shell: bash
 
-      - name: Show LaTeX errors of the manual
-        if: always()
-        run: |
-          R CMD Rd2pdf --no-preview --no-clean --output=manual.pdf . || true
-          for f in $(find . -name "Rd2.log" -o -name "*.ilg"); do echo "== $f"; grep -n -B2 -A8 "^!\|Error\|error" "$f" | head -60; done
-        shell: bash
-
       - name: Example timings over 2 seconds
         run: |
           Rscript -e 't <- read.table("simcompR.Rcheck/simcompR-Ex.timings", header = TRUE); t <- t[order(-t$elapsed), ]; print(head(t, 10)); slow <- t[t$elapsed > 2, ]; if (nrow(slow)) stop("slow examples: ", paste(slow$name, collapse = ", "))'
