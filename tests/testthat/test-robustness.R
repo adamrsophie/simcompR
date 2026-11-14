@@ -251,7 +251,5 @@ test_that("a breakpoint on a sample hit is seen at that hit", {
 test_that("a lookup table needs two points", {
   m <- sim_model()
   sim_add_block(m, "constant", "c")
-  sim_add_block(m, "lookup", "l", x = 1, y = 1)
-  sim_connect(m, "c", "l")
-  expect_error(sim_compile(m), "two points")
+  expect_error(sim_add_block(m, "lookup", "l", x = 1, y = 1), "two points")
 })
