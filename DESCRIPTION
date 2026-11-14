@@ -7,11 +7,11 @@ Authors@R:
 Description: A code-first framework for building and simulating block
     diagrams of dynamic systems. Models are directed graphs of blocks with
     sized input and output ports. Compilation validates connections
-    and signal dimensions, analyzes direct-feedthrough dependencies,
+    and signal dimensions, analyzes which outputs depend directly on inputs,
     detects algebraic loops through strongly connected components (and can
     solve them with Newton iterations), and builds a deterministic,
     insertion-order invariant execution schedule. The runtime integrates
-    continuous states with 'deSolve', advances discrete and multirate
+    continuous states with 'deSolve', advances discrete and multi-rate
     blocks on an exact integer-indexed sample clock with defined
     output-before-update semantics, restarts integration at scheduled
     discontinuities, and locates zero crossings for state resets, mode

@@ -1,0 +1,95 @@
+name: CRAN-check
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  cran:
+    runs-on: ubuntu-latest
+    name: CRAN incoming (${{ matrix.r }})
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        r: [release, devel]
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      _R_CHECK_CRAN_INCOMING_: true
+      _R_CHECK_CRAN_INCOMING_REMOTE_: true
+      _R_CHECK_FORCE_SUGGESTS_: true
+      _R_CHECK_TIMINGS_: 0
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: r-lib/actions/setup-pandoc@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+
+      - uses: r-lib/actions/setup-tinytex@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+
+      - uses: r-lib/actions/setup-r@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+        with:
+          r-version: ${{ matrix.r }}
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@f9a764fea8d5c63df6ef9a5c7795bf7deb5d7e05 # v2.14.0
+        with:
+          extra-packages: any::rcmdcheck, any::spelling, any::urlchecker
+          needs: check
+
+      - name: Install LaTeX packages for the manual
+        run: tlmgr install inconsolata helvetic courier psnfss times ec
+
+      - name: Build and check as CRAN does, with the PDF manual
+        run: |
+          R CMD build .
+          tarball=$(ls simcompR_*.tar.gz)
+          R CMD check --as-cran --timings "$tarball" || true
+          cat simcompR.Rcheck/00check.log
+        shell: bash
+
+      - name: Example timings over 2 seconds
+        run: |
+          Rscript -e 't <- read.table("simcompR.Rcheck/simcompR-Ex.timings", header = TRUE); t <- t[order(-t$elapsed), ]; print(head(t, 10)); slow <- t[t$elapsed > 2, ]; if (nrow(slow)) stop("slow examples: ", paste(slow$name, collapse = ", "))'
+
+      - name: Fail on anything except the new submission note
+        run: |
+          Rscript -e '
+            log <- readLines("simcompR.Rcheck/00check.log")
+            status <- grep("^Status:", log, value = TRUE)
+            cat(status, "\n")
+            bad <- grep("(ERROR|WARNING|NOTE)$", log, value = TRUE)
+            notes <- grep("CRAN incoming feasibility", bad, invert = TRUE, value = TRUE)
+            if (length(notes)) stop("unexpected: ", paste(notes, collapse = "; "))
+            i <- grep("CRAN incoming feasibility", log)
+            if (length(i)) {
+              block <- log[i:min(length(log), i + 25L)]
+              end <- grep("^\\* checking", block[-1L])[1L]
+              block <- block[seq_len(if (is.na(end)) length(block) else end)]
+              cat(block, sep = "\n")
+              extra <- grep("New submission|Maintainer:|^\\s*$|^\\*", block, invert = TRUE, value = TRUE)
+              if (length(extra)) stop("incoming note has more than the new submission line")
+            }'
+
+      - name: Spelling
+        run: |
+          Rscript -e 's <- spelling::spell_check_package(); print(s); if (nrow(s)) stop("misspelled words")'
+
+      - name: URLs
+        run: |
+          Rscript -e 'u <- urlchecker::url_check(); print(u); if (nrow(u)) stop("bad URLs")'
+
+      - name: Upload check folder
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cran-check-${{ matrix.r }}
+          path: simcompR.Rcheck
