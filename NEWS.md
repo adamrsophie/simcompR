@@ -32,6 +32,9 @@ First release.
   variable-size signals. State machines are flat.
 * `sim_param()` references cannot be combined in arithmetic (write `-a` with
   a gain block or a separate parameter).
+* A zero-crossing event whose function starts a run exactly on its level
+  does not fire at the start, even when it then moves in the trigger
+  direction.
 * Block parameters whose names are a prefix of an argument of
   `sim_add_block()` (`model`, `type`, `name`) or `sim_set_params()`
   (`plan`) are captured by R's partial matching; avoid names such as `n`

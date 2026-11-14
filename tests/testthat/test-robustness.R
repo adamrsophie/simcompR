@@ -253,3 +253,71 @@ test_that("a lookup table needs two points", {
   sim_add_block(m, "constant", "c")
   expect_error(sim_add_block(m, "lookup", "l", x = 1, y = 1), "two points")
 })
+
+test_that("multi-port dynamic blocks plot through their port signals", {
+  m <- sim_model()
+  sim_add_block(m, "constant", "c")
+  sim_add_block(m, "state_machine", "sm", states = c("a", "b"), data = c(n = 0),
+                transitions = list(sim_transition("a", "b", "t > 0.5")))
+  sim_connect(m, "c", "sm")
+  r <- sim_run(sim_compile(m), c(0, 1))
+  expect_true(all(simcompR:::default_plot_signals(r) %in% c("sm.state", "sm.data")))
+  pdf(NULL)
+  on.exit(grDevices::dev.off())
+  expect_invisible(plot(r))
+})
+
+test_that("a switch inside a solved loop starts in the right mode", {
+  m <- sim_model()
+  sim_add_block(m, "constant", "u", value = 1)
+  sim_add_block(m, "constant", "ctl", value = -1)
+  sim_add_block(m, "constant", "zero", value = 0)
+  sim_add_block(m, "sum", "s", signs = "+-")
+  sim_add_block(m, "switch", "sw")
+  sim_connect(m, "u", "s", input = 1)
+  sim_connect(m, "sw", "s", input = 2)
+  sim_connect(m, "s", "sw", input = 1)
+  sim_connect(m, "ctl", "sw", input = 2)
+  sim_connect(m, "zero", "sw", input = 3)
+  sim_add_block(m, "integrator", "x")
+  sim_connect(m, "s", "x")
+  r <- sim_run(sim_compile(m, algebraic_loops = "solve"), c(0, 1), times = 1)
+  expect_equal(unname(sim_signal(r, "s")), 1)
+  expect_equal(unname(sim_signal(r, "sw")), 0)
+})
+
+test_that("direction filters hold for jumps of discontinuous signals", {
+  m <- sim_model()
+  sim_add_block(m, "time", "t")
+  sim_add_block(m, "compare", "c", threshold = 0.5, op = ">=")
+  sim_connect(m, "t", "c")
+  sim_add_block(m, "integrator", "n")
+  sim_add_block(m, "constant", "z", value = 0)
+  sim_connect(m, "z", "n")
+  sim_add_event(m, "dn", sim_zero_crossing("c", "falling", level = 0.5),
+                reset = list(n = "x + 1"))
+  r <- sim_run(sim_compile(m), c(0, 1))
+  expect_equal(nrow(sim_events(r)), 0)
+})
+
+test_that("smooth problems far from t = 0 are integrated at the true time", {
+  m <- sim_model()
+  sim_add_block(m, "ramp", "u", start = 1e9)
+  sim_add_block(m, "integrator", "x")
+  sim_connect(m, "u", "x")
+  r <- sim_run(sim_compile(m), c(1e9, 1e9 + 1), times = 1e9 + 1, rtol = 1e-10, atol = 1e-12)
+  expect_equal(unname(tail(sim_signal(r, "x"), 1)), 0.5, tolerance = 1e-5)
+})
+
+test_that("solver warnings are kept in the diagnostics", {
+  m <- sim_model()
+  sim_add_block(m, "integrator", "x", initial = 1)
+  sim_add_block(m, "gain", "k", gain = -1)
+  sim_connect(m, "x", "k")
+  sim_connect(m, "k", "x")
+  r <- suppressWarnings(sim_run(sim_compile(m), c(0, 100), times = c(0, 100),
+                                maxsteps = 3, on_failure = "warn"))
+  expect_equal(r$status, "failed")
+  expect_type(sim_diagnostics(r)$warnings, "character")
+  expect_gt(length(sim_diagnostics(r)$warnings), 0)
+})
