@@ -1,0 +1,120 @@
+# Logical, switching and sink blocks -----------------------------------------
+#
+# Logical values are carried as numeric signals: 1 for true and 0 for false.
+# Any nonzero input counts as true. There is no implicit conversion between
+# logical and numeric R vectors at the port level.
+
+compare_ops <- list(
+  ">" = `>`, ">=" = `>=`, "<" = `<`, "<=" = `<=`, "==" = `==`, "!=" = `!=`
+)
+
+register_logic_blocks <- function() {
+  reg <- function(...) sim_register_block_type(..., overwrite = TRUE)
+
+  reg("compare", category = "logic",
+      description = "1 when `u op threshold` holds, else 0 (elementwise)",
+      params = list(op = ">", threshold = 0),
+      build = function(p) {
+        op <- match.arg(p$op, names(compare_ops))
+        thr <- check_number(p$threshold, "`threshold`")
+        f <- compare_ops[[op]]
+        elementwise_block(function(v) as.numeric(f(v, thr)))
+      })
+
+  reg("logic", category = "logic",
+      description = "Boolean and, or, xor, nand, nor, not of 0/1 signals",
+      params = list(op = "and", n = 2),
+      build = function(p) {
+        op <- match.arg(p$op, c("and", "or", "xor", "nand", "nor", "not"))
+        n <- if (op == "not") 1L else p$n
+        if (!is_count(n)) sim_abort("`n` must be a positive integer.")
+        f <- switch(op,
+          and = function(u) Reduce(`&`, u), or = function(u) Reduce(`|`, u),
+          xor = function(u) (Reduce(`+`, lapply(u, function(v) v != 0)) %% 2) == 1,
+          nand = function(u) !Reduce(`&`, u), nor = function(u) !Reduce(`|`, u),
+          not = function(u) !u[[1]])
+        list(inputs = rep(NA, n), outputs = NA, feedthrough = TRUE,
+             size_out = function(s) broadcast_size(s),
+             output = function(t, x, d, u) {
+               m <- max(lengths(u))
+               as.numeric(f(lapply(u, function(v) expand(v != 0, m))))
+             })
+      })
+
+  reg("switch", category = "logic",
+      description = "Pass in1 when in2 satisfies the criterion, else in3 (zero-crossing located)",
+      params = list(threshold = 0, criterion = ">="),
+      build = function(p) {
+        thr <- check_number(p$threshold, "`threshold`")
+        crit <- match.arg(p$criterion, c(">=", ">", "!="))
+        tol <- 1e-9 * (1 + abs(thr))
+        test <- function(c2) switch(crit, ">=" = c2 >= thr, ">" = c2 > thr,
+                                    "!=" = c2 != thr)
+        # The discrete state is the mode (1 = pass in1). It changes only at
+        # located crossings of in2 - threshold, so the right-hand side stays
+        # smooth inside each integration segment.
+        list(inputs = c(NA, 1L, NA), outputs = NA, feedthrough = TRUE,
+             input_names = c("in1", "control", "in3"),
+             nd = 1L, d0 = 1,
+             size_out = function(n) broadcast_size(n[c(1, 3)]),
+             output = function(t, x, d, u) {
+               n <- max(length(u[[1]]), length(u[[3]]))
+               if (d[[1]] == 1) expand(u[[1]], n) else expand(u[[3]], n)
+             },
+             zc = function(t, x, d, u) u[[2]] - thr,
+             zc_direction = "either",
+             on_zc = function(i, direction, t, x, d, u) {
+               mode <- if (crit == "!=") 1 else if (direction == "rising") 1 else 0
+               list(d = mode)
+             },
+             modes = function(t, x, d, u) {
+               g <- u[[2]] - thr
+               if (abs(g) <= tol && crit != "!=") d else as.numeric(test(u[[2]]))
+             })
+      })
+
+  reg("relay", category = "logic",
+      description = "Hysteresis relay: switches on above on_point, off below off_point",
+      params = list(on_point = 0.5, off_point = -0.5, on_value = 1, off_value = 0,
+                    initial = "off"),
+      build = function(p) {
+        on <- check_number(p$on_point, "`on_point`")
+        off <- check_number(p$off_point, "`off_point`")
+        if (off > on) sim_abort("`off_point` must not exceed `on_point`.")
+        yon <- check_number(p$on_value, "`on_value`")
+        yoff <- check_number(p$off_value, "`off_value`")
+        init <- match.arg(p$initial, c("off", "on"))
+        list(inputs = 1L, outputs = 1L, feedthrough = FALSE,
+             nd = 1L, d0 = as.numeric(init == "on"),
+             output = function(t, x, d, u) if (d[[1]] == 1) yon else yoff,
+             zc = function(t, x, d, u) c(u[[1]] - on, u[[1]] - off),
+             zc_direction = c("rising", "falling"),
+             on_zc = function(i, direction, t, x, d, u) {
+               if (i == 1L) list(d = 1) else list(d = 0)
+             },
+             modes = function(t, x, d, u) {
+               v <- u[[1]]
+               if (d[[1]] == 0 && v > on) 1 else if (d[[1]] == 1 && v < off) 0 else d
+             })
+      })
+
+  reg("scope", category = "sink",
+      description = "Mark a signal for recording and plotting",
+      build = function(p) list(inputs = NA, feedthrough = FALSE))
+
+  reg("terminator", category = "sink",
+      description = "Accept a signal and ignore it",
+      build = function(p) list(inputs = NA, feedthrough = FALSE))
+
+  reg("stop", category = "sink",
+      description = "Stop the simulation when the input rises above threshold",
+      params = list(threshold = 0),
+      build = function(p) {
+        thr <- check_number(p$threshold, "`threshold`")
+        list(inputs = 1L, feedthrough = FALSE,
+             zc = function(t, x, d, u) u[[1]] - thr,
+             zc_direction = "rising",
+             on_zc = function(i, direction, t, x, d, u) list(terminal = TRUE),
+             stop_if = function(t, x, d, u) u[[1]] > thr)
+      })
+}
