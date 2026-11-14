@@ -209,3 +209,60 @@ test_that("autonomous ode blocks need no input", {
   expect_error(sim_add_block(m, "ode", "w", n_inputs = 2, initial = 1,
                              deriv = function(t, x, u) -x), "0 or 1")
 })
+
+test_that("kinks of vector inputs are located per element", {
+  m <- sim_model()
+  sim_add_block(m, "sine", "u")
+  sim_add_block(m, "gain", "g", gain = 2)
+  sim_add_block(m, "mux", "v")
+  sim_add_block(m, "saturation", "s", lower = -0.5, upper = 0.5)
+  sim_add_block(m, "integrator", "x", initial = c(0, 0))
+  sim_connect(m, "u", "g")
+  sim_connect(m, "u", "v", input = 1)
+  sim_connect(m, "g", "v", input = 2)
+  sim_connect(m, "v", "s")
+  sim_connect(m, "s", "x")
+  p <- sim_compile(m)
+  expect_equal(p$zc$n, 4L)
+  r <- sim_run(p, c(0, pi), times = pi, rtol = 1e-10, atol = 1e-12)
+  # integral of min(k sin t, 0.5) over [0, pi]
+  exact <- function(k) {
+    a <- asin(0.5 / k)
+    2 * k * (1 - cos(a)) + 0.5 * (pi - 2 * a)
+  }
+  expect_equal(unname(sim_signal(r, "x")), c(exact(1), exact(2)), tolerance = 1e-8)
+})
+
+test_that("instance parameters may be expressions of the parent's parameters", {
+  lag <- sim_subsystem("lag", params = list(inv_tau = 1))
+  sim_add_block(lag, "inport", "u", index = 1)
+  sim_add_block(lag, "subtract", "e")
+  sim_add_block(lag, "gain", "k", gain = sim_param("inv_tau"))
+  sim_add_block(lag, "integrator", "y")
+  sim_add_block(lag, "outport", "out", index = 1)
+  sim_connect(lag, "u", "e", input = 1)
+  sim_connect(lag, "y", "e", input = 2)
+  sim_connect(lag, "e", "k")
+  sim_connect(lag, "k", "y")
+  sim_connect(lag, "y", "out")
+  m <- sim_model(params = list(tau = 2))
+  sim_add_block(m, "step", "u", time = 0)
+  sim_add_block(m, "subsystem", "f", system = lag, params = list(inv_tau = 1 / sim_param("tau")))
+  sim_connect(m, "u", "f")
+  p <- sim_compile(m)
+  out <- function(plan) unname(sim_signal(sim_run(plan, c(0, 1), times = 1, rtol = 1e-10,
+                                                    atol = 1e-12), "f"))
+  expect_equal(out(p), 1 - exp(-0.5), tolerance = 1e-8)
+  expect_equal(out(sim_set_params(p, tau = 0.5)), 1 - exp(-2), tolerance = 1e-8)
+})
+
+test_that("models without continuous states ignore kinks", {
+  m <- sim_model()
+  sim_add_block(m, "sine", "u")
+  sim_add_block(m, "saturation", "s", lower = -0.5, upper = 0.5)
+  sim_add_block(m, "unit_delay", "z", period = 0.1)
+  sim_connect(m, "u", "s")
+  sim_connect(m, "s", "z")
+  r <- sim_run(sim_compile(m), c(0, 1))
+  expect_equal(sim_diagnostics(r)$stats[["segments"]], 0)
+})

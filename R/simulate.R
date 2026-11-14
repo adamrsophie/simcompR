@@ -23,10 +23,15 @@ root_methods <- c("lsoda", "lsode", "lsodes", "lsodar")
 #' **Inside a segment** discrete states and held outputs are constant and
 #' the continuous states are integrated with [deSolve::ode()]. The
 #' derivative function has no side effects. When zero-crossing functions
-#' exist (from [sim_add_event()] or from `switch`, `relay` and `stop`
-#' blocks) the root finder stops the solver at the crossing; the event is
-#' applied and integration restarts there. A crossing that ends exactly at
-#' zero is not detected again at the restart.
+#' exist (from [sim_add_event()], from `switch`, `relay` and `stop` blocks,
+#' or from the kinks of memoryless blocks such as `saturation`) the root
+#' finder stops the solver at the crossing; the event is applied (a kink
+#' only restarts the solver) and integration restarts there. A crossing
+#' that ends exactly at zero is not detected again at the restart. An event
+#' whose function starts a segment exactly on its level and was not just
+#' fired fires when the function moves away in the trigger direction, so
+#' an event can fire at the initial time. Crossings caused by jumps at a
+#' segment boundary (a step, a sample hit, a reset) fire at the boundary.
 #'
 #' **Recording.** Signals are computed after the solve from the accepted
 #' states, never inside the derivative function. A value recorded at a
@@ -49,8 +54,9 @@ root_methods <- c("lsoda", "lsode", "lsodes", "lsodar")
 #'   zero crossings need one of `"lsoda"`, `"lsode"`, `"lsodes"` or
 #'   `"lsodar"`.
 #' @param rtol,atol Relative and absolute tolerances.
-#' @param hmax Optional maximum step size. When the model has zero-crossing
-#'   functions and `hmax` is not given, it is `(tf - t0) / 100`, because the
+#' @param hmax Optional maximum step size. When the model has events or
+#'   switching blocks and `hmax` is not given, it is `(tf - t0) / 100`
+#'   (kinks alone do not set it), because the
 #'   root finder cannot see two crossings inside one step; give a smaller
 #'   value for signals that cross faster.
 #' @param maxsteps Maximum number of internal steps per segment.
@@ -62,8 +68,10 @@ root_methods <- c("lsoda", "lsode", "lsodes", "lsodar")
 #'   is stopped with status `"event_limit"`. Guards against chattering and
 #'   Zeno behavior.
 #' @param zc_tol A zero-crossing function whose value at the start of a
-#'   segment is within `zc_tol` of zero is treated as exactly zero there,
-#'   which prevents retriggering the same root.
+#'   segment is within `zc_tol` of zero is treated as exactly zero there:
+#'   the same root is not located again, and the event fires only if the
+#'   function leaves zero in its trigger direction and the event did not
+#'   just fire at that instant.
 #' @param on_failure `"error"` raises an error when the simulation fails;
 #'   `"warn"` returns the partial result with a warning.
 #' @param ... Further arguments for [deSolve::ode()].
@@ -171,6 +179,8 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
   # step (which the root finder cannot see) need a fast signal.
   if (is.null(hmax) && nzc && n_strict) hmax <- (tf - t0) / 100
   if (!is.null(hmax)) ode_args$hmax <- hmax
+  # without continuous states nothing is integrated, so kinks need no stop
+  if (plan$nx == 0L && !n_strict) nzc <- 0L
   dummy <- plan$nx == 0L && nzc > 0L
 
   rows <- list()
@@ -446,17 +456,7 @@ integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
   # this segment when the solver evaluates the right-hand side exactly at
   # tn. All other blocks see the true solver time.
   t_left <- tn - 4 * .Machine$double.eps * max(1, abs(tn))
-  # The root finder usually asks for the point the derivative was just
-  # computed at; remember the last evaluation so it is not repeated. The
-  # cache lives in this segment's frame only and holds a pure function's
-  # value, so it changes no result.
-  last_t <- NA_real_; last_y <- NULL; last_sig <- NULL
-  signals_at <- function(tt, y) {
-    if (identical(tt, last_t) && identical(y, last_y)) return(last_sig)
-    s <- evaluate(plan, tt, xs(y), d, held, t_left = t_left)$sig
-    last_t <<- tt; last_y <<- y; last_sig <<- s
-    s
-  }
+  signals_at <- function(tt, y) evaluate(plan, tt, xs(y), d, held, t_left = t_left)$sig
   func <- function(tt, y, parms) {
     sig <- signals_at(tt, y)
     list(if (dummy) 0 else derivatives(plan, tt, y, d, sig))

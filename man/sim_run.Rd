@@ -36,8 +36,9 @@ zero crossings need one of \code{"lsoda"}, \code{"lsode"}, \code{"lsodes"} or
 
 \item{rtol, atol}{Relative and absolute tolerances.}
 
-\item{hmax}{Optional maximum step size. When the model has zero-crossing
-functions and \code{hmax} is not given, it is \code{(tf - t0) / 100}, because the
+\item{hmax}{Optional maximum step size. When the model has events or
+switching blocks and \code{hmax} is not given, it is \code{(tf - t0) / 100}
+(kinks alone do not set it), because the
 root finder cannot see two crossings inside one step; give a smaller
 value for signals that cross faster.}
 
@@ -54,8 +55,10 @@ is stopped with status \code{"event_limit"}. Guards against chattering and
 Zeno behavior.}
 
 \item{zc_tol}{A zero-crossing function whose value at the start of a
-segment is within \code{zc_tol} of zero is treated as exactly zero there,
-which prevents retriggering the same root.}
+segment is within \code{zc_tol} of zero is treated as exactly zero there:
+the same root is not located again, and the event fires only if the
+function leaves zero in its trigger direction and the event did not
+just fire at that instant.}
 
 \item{on_failure}{\code{"error"} raises an error when the simulation fails;
 \code{"warn"} returns the partial result with a warning.}
@@ -91,10 +94,15 @@ delay produces \code{y[k] = u[k-1]};
 \strong{Inside a segment} discrete states and held outputs are constant and
 the continuous states are integrated with \code{\link[deSolve:ode]{deSolve::ode()}}. The
 derivative function has no side effects. When zero-crossing functions
-exist (from \code{\link[=sim_add_event]{sim_add_event()}} or from \code{switch}, \code{relay} and \code{stop}
-blocks) the root finder stops the solver at the crossing; the event is
-applied and integration restarts there. A crossing that ends exactly at
-zero is not detected again at the restart.
+exist (from \code{\link[=sim_add_event]{sim_add_event()}}, from \code{switch}, \code{relay} and \code{stop} blocks,
+or from the kinks of memoryless blocks such as \code{saturation}) the root
+finder stops the solver at the crossing; the event is applied (a kink
+only restarts the solver) and integration restarts there. A crossing
+that ends exactly at zero is not detected again at the restart. An event
+whose function starts a segment exactly on its level and was not just
+fired fires when the function moves away in the trigger direction, so
+an event can fire at the initial time. Crossings caused by jumps at a
+segment boundary (a step, a sample hit, a reset) fire at the boundary.
 
 \strong{Recording.} Signals are computed after the solve from the accepted
 states, never inside the derivative function. A value recorded at a
