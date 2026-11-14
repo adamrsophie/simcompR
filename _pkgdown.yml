@@ -1,0 +1,84 @@
+url: https://adamrsophie.github.io/simcompR/
+
+template:
+  bootstrap: 5
+  light-switch: true
+  math-rendering: katex
+
+navbar:
+  structure:
+    left: [intro, reference, articles, news]
+    right: [search, lightswitch, github]
+
+home:
+  sidebar:
+    structure: [links, license, citation, authors, dev]
+
+articles:
+- title: Getting started
+  navbar: Getting started
+  contents:
+  - simcompR
+  - ports-and-signals
+  - compilation
+- title: Continuous and discrete simulation
+  navbar: Simulation
+  contents:
+  - continuous-simulation
+  - feedback-systems
+  - discrete-time
+  - multirate
+  - hybrid-events
+  - algebraic-loops
+- title: Structure and logic
+  navbar: Structure and logic
+  contents:
+  - subsystems
+  - state-machines
+  - custom-blocks
+- title: Experiments, files and validation
+  navbar: Experiments and validation
+  contents:
+  - experiments
+  - model-files
+  - validation
+
+reference:
+- title: Building models
+  contents:
+  - sim_model
+  - sim_add_block
+  - sim_connect
+  - sim_disconnect
+  - sim_set_block_params
+  - sim_blocks
+  - sim_copy
+  - sim_param
+  - sim_block_types
+- title: Subsystems, events and state machines
+  contents:
+  - sim_subsystem
+  - sim_add_event
+  - sim_transition
+  - sim_check_state_machine
+- title: Compiling and running
+  contents:
+  - sim_compile
+  - sim_set_params
+  - sim_run
+  - sim_diagnostics
+- title: Results
+  contents:
+  - sim_signal
+  - plot.sim_result
+- title: Experiments
+  contents:
+  - sim_sweep
+- title: Files, diagrams and extension
+  contents:
+  - sim_write_json
+  - sim_to_dot
+  - sim_register_block_type
+- title: Package
+  contents:
+  - simcompR-package

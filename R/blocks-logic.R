@@ -23,11 +23,11 @@ register_logic_blocks <- function() {
 
   reg("logic", category = "logic",
       description = "Boolean and, or, xor, nand, nor, not of 0/1 signals",
-      params = list(op = "and", n = 2),
+      params = list(op = "and", n_inputs = 2),
       build = function(p) {
         op <- match.arg(p$op, c("and", "or", "xor", "nand", "nor", "not"))
-        n <- if (op == "not") 1L else p$n
-        if (!is_count(n)) sim_abort("`n` must be a positive integer.")
+        n <- if (op == "not") 1L else p$n_inputs
+        if (!is_count(n)) sim_abort("`n_inputs` must be a positive integer.")
         f <- switch(op,
           and = function(u) Reduce(`&`, u), or = function(u) Reduce(`|`, u),
           xor = function(u) (Reduce(`+`, lapply(u, function(v) v != 0)) %% 2) == 1,

@@ -135,11 +135,11 @@ register_math_blocks <- function() {
 
   reg("minmax", category = "math",
       description = "Minimum or maximum across inputs (or of one vector input)",
-      params = list(fun = "min", n = 1),
+      params = list(fun = "min", n_inputs = 1),
       build = function(p) {
         fun <- match.arg(p$fun, c("min", "max"))
-        if (!is_count(p$n)) sim_abort("`n` must be a positive integer.")
-        n <- as.integer(p$n)
+        if (!is_count(p$n_inputs)) sim_abort("`n_inputs` must be a positive integer.")
+        n <- as.integer(p$n_inputs)
         if (n == 1L) {
           f <- if (fun == "min") min else max
           return(list(inputs = NA, outputs = 1L, feedthrough = TRUE,
@@ -152,10 +152,10 @@ register_math_blocks <- function() {
       })
 
   reg("mux", category = "routing", description = "Concatenate inputs into one vector",
-      params = list(n = 2),
+      params = list(n_inputs = 2),
       build = function(p) {
-        if (!is_count(p$n)) sim_abort("`n` must be a positive integer.")
-        list(inputs = rep(NA, p$n), outputs = NA, feedthrough = TRUE,
+        if (!is_count(p$n_inputs)) sim_abort("`n_inputs` must be a positive integer.")
+        list(inputs = rep(NA, p$n_inputs), outputs = NA, feedthrough = TRUE,
              size_out = function(s) sum(s),
              output = function(t, x, d, u) unlist(u, use.names = FALSE))
       })

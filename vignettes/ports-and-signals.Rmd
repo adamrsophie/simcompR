@@ -133,7 +133,7 @@ elements by index:
 m <- sim_model("routing")
 sim_add_block(m, "time", "t")
 sim_add_block(m, "sine", "s")
-sim_add_block(m, "mux", "both", n = 2)
+sim_add_block(m, "mux", "both", n_inputs = 2)
 sim_add_block(m, "selector", "second", index = 2)
 sim_connect(m, "t", "both", input = 1)
 sim_connect(m, "s", "both", input = 2)
