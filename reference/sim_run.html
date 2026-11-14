@@ -117,8 +117,9 @@ zero crossings need one of <code>"lsoda"</code>, <code>"lsode"</code>, <code>"ls
 
 
 <dt id="arg-hmax">hmax<a class="anchor" aria-label="anchor" href="#arg-hmax"></a></dt>
-<dd><p>Optional maximum step size. When the model has zero-crossing
-functions and <code>hmax</code> is not given, it is <code>(tf - t0) / 100</code>, because the
+<dd><p>Optional maximum step size. When the model has events or
+switching blocks and <code>hmax</code> is not given, it is <code>(tf - t0) / 100</code>
+(kinks alone do not set it), because the
 root finder cannot see two crossings inside one step; give a smaller
 value for signals that cross faster.</p></dd>
 
@@ -145,8 +146,10 @@ Zeno behavior.</p></dd>
 
 <dt id="arg-zc-tol">zc_tol<a class="anchor" aria-label="anchor" href="#arg-zc-tol"></a></dt>
 <dd><p>A zero-crossing function whose value at the start of a
-segment is within <code>zc_tol</code> of zero is treated as exactly zero there,
-which prevents retriggering the same root.</p></dd>
+segment is within <code>zc_tol</code> of zero is treated as exactly zero there:
+the same root is not located again, and the event fires only if the
+function leaves zero in its trigger direction and the event did not
+just fire at that instant.</p></dd>
 
 
 <dt id="arg-on-failure">on_failure<a class="anchor" aria-label="anchor" href="#arg-on-failure"></a></dt>
@@ -181,10 +184,15 @@ delay produces <code>y[k] = u[k-1]</code>;</p></li>
 </ol><p><strong>Inside a segment</strong> discrete states and held outputs are constant and
 the continuous states are integrated with <code><a href="https://rdrr.io/pkg/deSolve/man/ode.html" class="external-link">deSolve::ode()</a></code>. The
 derivative function has no side effects. When zero-crossing functions
-exist (from <code><a href="sim_add_event.html">sim_add_event()</a></code> or from <code>switch</code>, <code>relay</code> and <code>stop</code>
-blocks) the root finder stops the solver at the crossing; the event is
-applied and integration restarts there. A crossing that ends exactly at
-zero is not detected again at the restart.</p>
+exist (from <code><a href="sim_add_event.html">sim_add_event()</a></code>, from <code>switch</code>, <code>relay</code> and <code>stop</code> blocks,
+or from the kinks of memoryless blocks such as <code>saturation</code>) the root
+finder stops the solver at the crossing; the event is applied (a kink
+only restarts the solver) and integration restarts there. A crossing
+that ends exactly at zero is not detected again at the restart. An event
+whose function starts a segment exactly on its level and was not just
+fired fires when the function moves away in the trigger direction, so
+an event can fire at the initial time. Crossings caused by jumps at a
+segment boundary (a step, a sample hit, a reset) fire at the boundary.</p>
 <p><strong>Recording.</strong> Signals are computed after the solve from the accepted
 states, never inside the derivative function. A value recorded at a
 sample hit is the value after the hit (right-continuous). At an event

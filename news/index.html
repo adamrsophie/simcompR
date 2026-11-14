@@ -82,7 +82,7 @@
 </ul><div class="section level3">
 <h3 id="known-limitations-0-1-0">Known limitations<a class="anchor" aria-label="anchor" href="#known-limitations-0-1-0"></a></h3>
 <ul><li>Signals are real vectors of fixed size; no buses, matrices or variable-size signals. State machines are flat.</li>
-<li>Each segment between sample hits, breakpoints, events or kinks is one <code><a href="https://rdrr.io/pkg/deSolve/man/ode.html" class="external-link">deSolve::ode()</a></code> call. On a typical machine a 1 kHz sampled loop costs about 0.75 s of CPU time per simulated second (see <code>benchmarks/</code>), so very fast sample rates over long spans are slow.</li>
+<li>Each segment between sample hits, breakpoints, events or kinks is one <code><a href="https://rdrr.io/pkg/deSolve/man/ode.html" class="external-link">deSolve::ode()</a></code> call. In the measurements of <code>benchmarks/run.R</code> a 1 kHz sampled loop cost about 0.7 to 0.8 s of CPU time per simulated second, so very fast sample rates over long spans are slow. Locating kinks adds one segment per kink (about twice the cost of the saturated sine benchmark, for the accuracy gained).</li>
 <li>
 <code>method = "radau"</code> and <code>method = "iteration"</code> are not supported. Zero crossings need <code>lsoda</code>, <code>lsode</code>, <code>lsodes</code> or <code>lsodar</code>; other methods skip kinks and refuse models with events.</li>
 </ul></div>

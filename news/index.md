@@ -39,10 +39,12 @@ First release.
 - Signals are real vectors of fixed size; no buses, matrices or
   variable-size signals. State machines are flat.
 - Each segment between sample hits, breakpoints, events or kinks is one
-  [`deSolve::ode()`](https://rdrr.io/pkg/deSolve/man/ode.html) call. On
-  a typical machine a 1 kHz sampled loop costs about 0.75 s of CPU time
-  per simulated second (see `benchmarks/`), so very fast sample rates
-  over long spans are slow.
+  [`deSolve::ode()`](https://rdrr.io/pkg/deSolve/man/ode.html) call. In
+  the measurements of `benchmarks/run.R` a 1 kHz sampled loop cost about
+  0.7 to 0.8 s of CPU time per simulated second, so very fast sample
+  rates over long spans are slow. Locating kinks adds one segment per
+  kink (about twice the cost of the saturated sine benchmark, for the
+  accuracy gained).
 - `method = "radau"` and `method = "iteration"` are not supported. Zero
   crossings need `lsoda`, `lsode`, `lsodes` or `lsodar`; other methods
   skip kinks and refuse models with events.

@@ -54,10 +54,10 @@ sim_run(
 
 - hmax:
 
-  Optional maximum step size. When the model has zero-crossing functions
-  and `hmax` is not given, it is `(tf - t0) / 100`, because the root
-  finder cannot see two crossings inside one step; give a smaller value
-  for signals that cross faster.
+  Optional maximum step size. When the model has events or switching
+  blocks and `hmax` is not given, it is `(tf - t0) / 100` (kinks alone
+  do not set it), because the root finder cannot see two crossings
+  inside one step; give a smaller value for signals that cross faster.
 
 - maxsteps:
 
@@ -80,8 +80,10 @@ sim_run(
 - zc_tol:
 
   A zero-crossing function whose value at the start of a segment is
-  within `zc_tol` of zero is treated as exactly zero there, which
-  prevents retriggering the same root.
+  within `zc_tol` of zero is treated as exactly zero there: the same
+  root is not located again, and the event fires only if the function
+  leaves zero in its trigger direction and the event did not just fire
+  at that instant.
 
 - on_failure:
 
@@ -129,11 +131,16 @@ the continuous states are integrated with
 [`deSolve::ode()`](https://rdrr.io/pkg/deSolve/man/ode.html). The
 derivative function has no side effects. When zero-crossing functions
 exist (from
-[`sim_add_event()`](https://adamrsophie.github.io/simcompR/reference/sim_add_event.md)
-or from `switch`, `relay` and `stop` blocks) the root finder stops the
-solver at the crossing; the event is applied and integration restarts
-there. A crossing that ends exactly at zero is not detected again at the
-restart.
+[`sim_add_event()`](https://adamrsophie.github.io/simcompR/reference/sim_add_event.md),
+from `switch`, `relay` and `stop` blocks, or from the kinks of
+memoryless blocks such as `saturation`) the root finder stops the solver
+at the crossing; the event is applied (a kink only restarts the solver)
+and integration restarts there. A crossing that ends exactly at zero is
+not detected again at the restart. An event whose function starts a
+segment exactly on its level and was not just fired fires when the
+function moves away in the trigger direction, so an event can fire at
+the initial time. Crossings caused by jumps at a segment boundary (a
+step, a sample hit, a reset) fire at the boundary.
 
 **Recording.** Signals are computed after the solve from the accepted
 states, never inside the derivative function. A value recorded at a
