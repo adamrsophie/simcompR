@@ -35,6 +35,9 @@ First release.
 - [`sim_param()`](https://adamrsophie.github.io/simcompR/reference/sim_param.md)
   references cannot be combined in arithmetic (write `-a` with a gain
   block or a separate parameter).
+- A zero-crossing event whose function starts a run exactly on its level
+  does not fire at the start, even when it then moves in the trigger
+  direction.
 - Block parameters whose names are a prefix of an argument of
   [`sim_add_block()`](https://adamrsophie.github.io/simcompR/reference/sim_add_block.md)
   (`model`, `type`, `name`) or

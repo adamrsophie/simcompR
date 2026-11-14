@@ -85,6 +85,7 @@
 <li>Signals are real vectors of fixed size; no buses, matrices or variable-size signals. State machines are flat.</li>
 <li>
 <code><a href="../reference/sim_param.html">sim_param()</a></code> references cannot be combined in arithmetic (write <code>-a</code> with a gain block or a separate parameter).</li>
+<li>A zero-crossing event whose function starts a run exactly on its level does not fire at the start, even when it then moves in the trigger direction.</li>
 <li>Block parameters whose names are a prefix of an argument of <code><a href="../reference/sim_add_block.html">sim_add_block()</a></code> (<code>model</code>, <code>type</code>, <code>name</code>) or <code><a href="../reference/sim_set_params.html">sim_set_params()</a></code> (<code>plan</code>) are captured by R’s partial matching; avoid names such as <code>n</code> or <code>p</code>.</li>
 <li>One <code><a href="https://rdrr.io/pkg/deSolve/man/ode.html" class="external-link">deSolve::ode()</a></code> call per segment: fast sample rates over long spans are slow.</li>
 <li>
