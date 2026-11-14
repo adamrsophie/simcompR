@@ -68,7 +68,7 @@ jobs:
             log <- readLines("simcompR.Rcheck/00check.log")
             status <- grep("^Status:", log, value = TRUE)
             cat(status, "\n")
-            bad <- grep("(ERROR|WARNING|NOTE)$", log, value = TRUE)
+            bad <- grep("^\\* .*(ERROR|WARNING|NOTE)$", log, value = TRUE)
             notes <- grep("CRAN incoming feasibility", bad, invert = TRUE, value = TRUE)
             if (length(notes)) stop("unexpected: ", paste(notes, collapse = "; "))
             i <- grep("CRAN incoming feasibility", log)
