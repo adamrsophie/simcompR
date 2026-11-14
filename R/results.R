@@ -79,7 +79,8 @@ check_result <- function(x) {
 #'
 #' @param result A `sim_result`.
 #' @param names Signal names. `NULL` returns all signals.
-#' @param drop Return a vector when a single scalar signal is requested.
+#' @param drop Drop dimensions of extent one, so a single scalar signal is
+#'   returned as a vector.
 #' @return A numeric vector or matrix (signals and states) or a data frame
 #'   (events).
 #' @examples
@@ -107,7 +108,7 @@ sim_signal <- function(result, names = NULL, drop = TRUE) {
     m
   })
   out <- do.call(cbind, cols)
-  if (drop && ncol(out) == 1L) out[, 1] else out
+  if (drop) drop(out) else out
 }
 
 #' @rdname sim_signal

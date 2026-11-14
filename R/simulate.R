@@ -98,6 +98,10 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
   n_event_zc <- sum(vapply(plan$events, function(e) e$trigger$kind == "zero_crossing", TRUE))
   nzc <- plan$zc$n + n_event_zc
   if (!is.character(method) || length(method) != 1L) sim_abort("`method` must be a string.")
+  if (method == "radau") {
+    sim_abort("method = \"radau\" is not supported: it cannot be told to stop at ",
+              "segment boundaries, so it would evaluate inputs past discontinuities.")
+  }
   if (nzc && !method %in% root_methods) {
     sim_abort("This model has zero-crossing functions; use method = one of ",
               paste0('"', root_methods, '"', collapse = ", "), ".")
@@ -350,7 +354,8 @@ integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
     list(if (dummy) 0 else derivatives(plan, tt, y, d, sig))
   }
   args <- c(list(y = y0, times = c(t, inner, tn), func = func, parms = NULL,
-                 method = method, rtol = rtol, atol = atol, maxsteps = maxsteps),
+                 method = method, rtol = rtol, atol = atol, maxsteps = maxsteps,
+                 tcrit = tn),
             ode_args)
   if (nzc) {
     g0 <- zero_crossings(plan, t, x, d, evaluate(plan, t, x, d, held)$sig)

@@ -223,7 +223,7 @@ compile_flat <- function(flat, params, opts, previous = NULL) {
       to = bnames[unlist(adj)],
       stringsAsFactors = FALSE),
     rates = rates$table,
-    notes = rate_notes(blocks, src, bnames)
+    notes = c(sizes$notes, rate_notes(blocks, src, bnames))
   )
 
   structure(list(
@@ -246,6 +246,7 @@ propagate_sizes <- function(defs, src, bnames) {
   ins <- lapply(defs, `[[`, "inputs")
   outs <- lapply(defs, `[[`, "outputs")
   partial <- FALSE
+  notes <- character()
   repeat {
     changed <- FALSE
     for (i in seq_len(nb)) {
@@ -288,8 +289,19 @@ propagate_sizes <- function(defs, src, bnames) {
       }
     }
     if (!changed) {
-      if (partial) break
-      partial <- TRUE
+      if (!partial) {
+        partial <- TRUE
+        next
+      }
+      # Last resort inside a feedback loop with no size information at all
+      # (for example y = cos(y)): take one unknown input as scalar and say so.
+      stuck <- which(vapply(ins, anyNA, TRUE))
+      if (!length(stuck)) break
+      i <- stuck[1]
+      ins[[i]][is.na(ins[[i]])] <- 1L
+      notes <- c(notes, paste0("Input size of block '", bnames[i], "' could not be ",
+                               "inferred from the diagram and was taken as 1 (scalar)."))
+      partial <- FALSE
     } else {
       partial <- FALSE
     }
@@ -309,7 +321,7 @@ propagate_sizes <- function(defs, src, bnames) {
     }
   }
   names(ins) <- names(outs) <- bnames
-  list(inputs = ins, out = outs)
+  list(inputs = ins, out = outs, notes = notes)
 }
 
 layout_vectors <- function(defs, sizes, bnames) {

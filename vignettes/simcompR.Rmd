@@ -1,0 +1,140 @@
+---
+title: "Building your first block diagram"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Building your first block diagram}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 7, fig.height = 4)
+```
+
+`simcompR` builds block diagrams in R code and simulates them. A diagram is
+a set of blocks (sources, gains, sums, integrators, delays, ...) whose
+output ports are wired to input ports of other blocks. This vignette builds
+the classic negative-feedback loop, explains each step and checks the result
+against the exact solution.
+
+```{r}
+library(simcompR)
+```
+
+## The model
+
+We want to simulate
+
+$$
+\frac{dx}{dt} = r - x, \qquad r = 1, \qquad x(0) = 0,
+$$
+
+whose exact solution is $x(t) = 1 - e^{-t}$. As a block diagram this is a
+constant reference $r$, a sum block computing the error $r - x$, and an
+integrator whose input is the error and whose output is $x$. The output of
+the integrator is fed back into the sum.
+
+## Step 1: create a model and add blocks
+
+A model is a container. `sim_add_block()` adds a block of a registered
+type with a unique name and its parameters, and returns a handle.
+
+```{r}
+model <- sim_model("feedback_system")
+
+reference <- sim_add_block(model, type = "constant", name = "reference", value = 1)
+error <- sim_add_block(model, type = "sum", name = "error", signs = c("+", "-"))
+plant <- sim_add_block(model, type = "integrator", name = "plant", initial = 0)
+```
+
+The sum block has one input port per sign, so `signs = c("+", "-")` (or
+the string `"+-"`) gives two inputs and computes `in1 - in2`.
+
+Models are modified in place: there is no need to reassign `model`.
+
+## Step 2: connect ports
+
+`sim_connect()` wires an output port of one block to an input port of
+another. Ports are numbered from 1; the default is port 1.
+
+```{r}
+sim_connect(model, from = reference, to = error, input = 1)
+sim_connect(model, from = plant, to = error, input = 2)
+sim_connect(model, from = error, to = plant)
+model
+```
+
+Connections are checked immediately where possible: connecting to a port
+that does not exist, or connecting two sources to the same input, is an
+error.
+
+```{r, error = TRUE}
+sim_connect(model, from = reference, to = error, input = 3)
+sim_connect(model, from = reference, to = plant)
+```
+
+## Step 3: compile
+
+Compilation validates the whole diagram and produces an immutable
+execution plan.
+
+```{r}
+plan <- sim_compile(model)
+plan
+```
+
+Notice the execution order: `plant` comes before `error`, even though it
+was added later. An integrator's output depends only on its state, not on
+its input at the same instant (it has no *direct feedthrough*), so it can be
+evaluated first. The sum does have direct feedthrough, so it must wait for
+both of its inputs. The feedback loop is therefore valid: it passes through
+a stateful block. See `vignette("compilation")` for the details.
+
+## Step 4: run
+
+```{r}
+result <- sim_run(plan, tspan = c(0, 10), times = seq(0, 10, by = 0.01))
+result
+```
+
+`times` are the output times. They are independent of the internal steps
+the adaptive solver takes.
+
+## Step 5: inspect and check
+
+```{r}
+x <- sim_signal(result, "plant")
+t <- sim_times(result)
+max(abs(x - (1 - exp(-t))))
+```
+
+The error is far below the default solver tolerance
+(`rtol = 1e-6`, `atol = 1e-8`). Tighter tolerances give a smaller error:
+
+```{r}
+tight <- sim_run(plan, tspan = c(0, 10), times = t, rtol = 1e-10, atol = 1e-12)
+max(abs(sim_signal(tight, "plant") - (1 - exp(-t))))
+```
+
+Every block output is recorded, so the error signal is also available:
+
+```{r}
+head(sim_signal(result, c("plant", "error")))
+plot(result, c("plant", "error"))
+```
+
+`summary()` reports the solver statistics and final states:
+
+```{r}
+summary(result)
+```
+
+## Where to go next
+
+* `vignette("ports-and-signals")`: port numbering, names, vector signals and
+  the sizing rules.
+* `vignette("continuous-simulation")`: solvers, tolerances and output times.
+* `vignette("discrete-time")` and `vignette("multirate")`: sampled blocks.
+* `vignette("hybrid-events")`: events, zero crossings and resets.
+* `vignette("subsystems")`, `vignette("algebraic-loops")`,
+  `vignette("state-machines")`, `vignette("experiments")`.

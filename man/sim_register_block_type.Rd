@@ -8,6 +8,7 @@ sim_register_block_type(
   type,
   build,
   params = list(),
+  required = names(params)[vapply(params, is.null, TRUE)],
   category = "user",
   description = "",
   portable = TRUE,
@@ -20,8 +21,10 @@ sim_register_block_type(
 \item{build}{Function of one argument, the named list of resolved
 parameters, returning a block definition.}
 
-\item{params}{Named list of parameter defaults. Use \code{NULL} for a required
-parameter.}
+\item{params}{Named list of parameter defaults.}
+
+\item{required}{Names of parameters the user must supply. By default,
+every parameter whose default is \code{NULL}.}
 
 \item{category}{Category used by \code{\link[=sim_block_types]{sim_block_types()}}.}
 

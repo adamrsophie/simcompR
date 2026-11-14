@@ -104,12 +104,12 @@ flatten_model <- function(model, prefix = "", scopes = list(), depth = 0L) {
   blocks <- list()
   aliases <- list()
   conns <- model$connections
-  conns$from <- paste0(prefix, conns$from)
-  conns$to <- paste0(prefix, conns$to)
+  conns$from <- paste0(prefix, conns$from, recycle0 = TRUE)
+  conns$to <- paste0(prefix, conns$to, recycle0 = TRUE)
   events <- lapply(model$events, function(e) {
     e$name <- paste0(prefix, e$name)
     if (e$trigger$kind == "zero_crossing") e$trigger$signal <- paste0(prefix, e$trigger$signal)
-    names(e$reset) <- paste0(prefix, names(e$reset))
+    if (length(e$reset)) names(e$reset) <- paste0(prefix, names(e$reset))
     e$scopes <- scopes
     e
   })

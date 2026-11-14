@@ -23,7 +23,8 @@ sim_times(result)
 
 \item{names}{Signal names. \code{NULL} returns all signals.}
 
-\item{drop}{Return a vector when a single scalar signal is requested.}
+\item{drop}{Drop dimensions of extent one, so a single scalar signal is
+returned as a vector.}
 }
 \value{
 A numeric vector or matrix (signals and states) or a data frame

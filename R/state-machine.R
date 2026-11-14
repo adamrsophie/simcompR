@@ -156,6 +156,7 @@ register_state_machine_block <- function() {
                   entry = list(), exit = list(), during = list(),
                   data = numeric(), outputs = NULL, n_inputs = 1,
                   period = 1, offset = 0),
+    required = "states",
     build = function(p) {
       states <- p$states
       initial <- if (is.na(p$initial[1])) states[1] else p$initial

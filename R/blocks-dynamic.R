@@ -99,6 +99,7 @@ register_dynamic_blocks <- function() {
   reg("state_space", category = "continuous",
       description = "dx/dt = A x + B u, y = C x + D u",
       params = list(A = NULL, B = NULL, C = NULL, D = NULL, initial = 0),
+      required = c("A", "B", "C"),
       build = function(p) {
         s <- check_ss(p)
         ss_continuous(s, initial_state(p$initial, nrow(s$A)))
@@ -108,6 +109,7 @@ register_dynamic_blocks <- function() {
       description = "General dx/dt = f(t, x, u), y = g(t, x, u) from R functions (not portable)",
       params = list(deriv = NULL, output = NULL, initial = NULL,
                     feedthrough = FALSE, size = NA),
+      required = c("deriv", "initial"),
       build = function(p) {
         f <- p$deriv
         g <- p$output %||% function(t, x, u) x
@@ -193,6 +195,7 @@ register_dynamic_blocks <- function() {
       description = "x[k+1] = A x[k] + B u[k], y[k] = C x[k] + D u[k]",
       params = list(A = NULL, B = NULL, C = NULL, D = NULL, initial = 0,
                     period = 1, offset = 0),
+      required = c("A", "B", "C"),
       build = function(p) {
         s <- check_ss(p)
         ss_discrete(s, initial_state(p$initial, nrow(s$A)), p$period, p$offset)

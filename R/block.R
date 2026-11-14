@@ -47,8 +47,9 @@
 #' @param type Type name (a single string).
 #' @param build Function of one argument, the named list of resolved
 #'   parameters, returning a block definition.
-#' @param params Named list of parameter defaults. Use `NULL` for a required
-#'   parameter.
+#' @param params Named list of parameter defaults.
+#' @param required Names of parameters the user must supply. By default,
+#'   every parameter whose default is `NULL`.
 #' @param category Category used by [sim_block_types()].
 #' @param description One line description.
 #' @param portable `TRUE` when every parameter can be written to JSON, so
@@ -73,6 +74,7 @@
 #' sim_signal(r, "c")
 #' @export
 sim_register_block_type <- function(type, build, params = list(),
+                                    required = names(params)[vapply(params, is.null, TRUE)],
                                     category = "user", description = "",
                                     portable = TRUE, overwrite = FALSE) {
   if (!is.character(type) || length(type) != 1L || !nzchar(type)) {
@@ -86,7 +88,11 @@ sim_register_block_type <- function(type, build, params = list(),
     sim_abort("Block type '", type, "' is already registered. ",
               "Use `overwrite = TRUE` to replace it.")
   }
-  assign(type, list(type = type, build = build, params = params,
+  force(required)
+  if (length(setdiff(required, names(params)))) {
+    sim_abort("`required` must name parameters listed in `params`.")
+  }
+  assign(type, list(type = type, build = build, params = params, required = required,
                     category = category, description = description,
                     portable = portable), envir = .registry)
   invisible(type)
@@ -196,8 +202,7 @@ build_block <- function(type_def, params, block_name) {
   }
   p <- defaults
   p[names(params)] <- params
-  missing <- names(defaults)[vapply(defaults, is.null, logical(1)) &
-                               !names(defaults) %in% names(params)]
+  missing <- setdiff(type_def$required, names(params))
   if (length(missing)) {
     sim_abort("Block '", block_name, "' (", type_def$type, "): required ",
               "parameter(s) missing: ", paste(missing, collapse = ", "), ".")

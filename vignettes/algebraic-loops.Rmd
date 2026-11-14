@@ -1,0 +1,130 @@
+---
+title: "Algebraic loops"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Algebraic loops}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 7, fig.height = 4)
+```
+
+```{r}
+library(simcompR)
+```
+
+A feedback cycle made only of direct-feedthrough blocks defines a signal
+implicitly, $y = f(y, u)$, at every instant. Such a cycle is an
+*algebraic loop*. A cycle that passes through an integrator, a delay or any
+other block without direct feedthrough is ordinary dynamic feedback and is
+not a loop.
+
+## Detection
+
+Compilation builds the graph of direct-feedthrough dependencies and finds
+its strongly connected components. A component with more than one block,
+or a block wired to itself, is a loop. By default it is an error, with one
+cycle printed:
+
+```{r, error = TRUE}
+m <- sim_model("loop")
+sim_add_block(m, "constant", "u", value = 1)
+sim_add_block(m, "sum", "s", signs = "+-")
+sim_add_block(m, "gain", "k", gain = 2)
+sim_connect(m, "u", "s", input = 1)
+sim_connect(m, "k", "s", input = 2)
+sim_connect(m, "s", "k")
+sim_compile(m)
+```
+
+`simcompR` never breaks a loop by inserting a hidden delay: that would
+change the mathematics silently.
+
+## Solving loops
+
+With `algebraic_loops = "solve"` each loop is solved at every evaluation.
+The unknowns are the outputs $z$ of the blocks in the loop, and the
+residual is $F(z) - z$, where $F$ evaluates the loop blocks once from the
+guessed outputs. Newton's method with a finite-difference Jacobian and a
+backtracking line search drives the residual below `loop_tol`.
+
+```{r}
+plan <- sim_compile(m, algebraic_loops = "solve")
+plan
+r <- sim_run(plan, c(0, 1), times = c(0, 1))
+sim_signal(r, "s")   # s = 1 - 2 s, so 1/3
+sim_diagnostics(r)$loop_residuals
+```
+
+The residual and iteration count at every recorded time are part of the
+result diagnostics. A loop that does not converge is an error, never a
+silently inconsistent result.
+
+### A nonlinear loop
+
+$y = \cos(y)$ has the unique solution $y \approx 0.739085$:
+
+```{r}
+nl <- sim_model("cos_loop")
+sim_add_block(nl, "math", "c", fun = "cos")
+sim_add_block(nl, "gain", "y", gain = 1)
+sim_connect(nl, "c", "y")
+sim_connect(nl, "y", "c")
+r <- sim_run(sim_compile(nl, algebraic_loops = "solve"), c(0, 1), times = 1)
+sim_signal(r, "y")
+```
+
+### Loops without a solution
+
+$y = y + 1$ has no solution. The Jacobian of the residual is singular and
+the run fails with an explanation:
+
+```{r, error = TRUE}
+bad <- sim_model("inconsistent")
+sim_add_block(bad, "constant", "one")
+sim_add_block(bad, "sum", "s")
+sim_connect(bad, "one", "s", input = 1)
+sim_connect(bad, "s", "s", input = 2)
+sim_run(sim_compile(bad, algebraic_loops = "solve"), c(0, 1))
+```
+
+## Loops inside dynamics
+
+Loops can sit inside a continuous model. Here
+$\dot x = s$ with $s = -x - s$, so $\dot x = -x/2$:
+
+```{r}
+dyn <- sim_model("dynamic_loop")
+sim_add_block(dyn, "integrator", "x", initial = 1)
+sim_add_block(dyn, "sum", "s", signs = "--")
+sim_add_block(dyn, "gain", "k", gain = 1)
+sim_connect(dyn, "x", "s", input = 1)
+sim_connect(dyn, "k", "s", input = 2)
+sim_connect(dyn, "s", "k")
+sim_connect(dyn, "s", "x")
+r <- sim_run(sim_compile(dyn, algebraic_loops = "solve"), c(0, 4),
+             rtol = 1e-10, atol = 1e-12)
+max(abs(sim_signal(r, "x") - exp(-sim_times(r) / 2)))
+```
+
+Every derivative evaluation solves the loop, which costs extra function
+evaluations. When possible, solve the loop by hand (here, replace the loop
+by a gain of 1/2) or break it with a physically meaningful state.
+
+## Feedthrough that depends on parameters
+
+Whether a state-space block has direct feedthrough depends on its `D`
+matrix. A plan whose `D` changes from zero to nonzero through
+`sim_set_params()` is analyzed again, so a new loop is never missed. See
+`vignette("compilation")`.
+
+## Limits
+
+* Loop solving uses a dense finite-difference Jacobian; it is meant for
+  small loops.
+* Switching blocks inside a loop keep the mode they had at the start of the
+  segment.
+* Consistent initialization of differential-algebraic systems is not
+  covered here; see the roadmap.
