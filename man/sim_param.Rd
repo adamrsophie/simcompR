@@ -2,12 +2,17 @@
 % Please edit documentation in R/block.R
 \name{sim_param}
 \alias{sim_param}
+\alias{sim_param_expr}
 \title{Refer to a model or subsystem parameter}
 \usage{
 sim_param(name)
+
+sim_param_expr(expr)
 }
 \arguments{
 \item{name}{Parameter name.}
+
+\item{expr}{A portable expression (string) in parameter names.}
 }
 \value{
 An object of class \code{sim_param}.
@@ -19,6 +24,18 @@ instance, then in the parameters of the parent, up to the top-level
 model. Changing a referenced parameter with \code{\link[=sim_set_params]{sim_set_params()}} or
 \code{\link[=sim_sweep]{sim_sweep()}} does not require editing the block.
 }
+\details{
+References can be combined with numbers and with each other by
+arithmetic (\code{-sim_param("a")}, \code{1 / sim_param("tau")},
+\code{2 * sim_param("a") + sim_param("b")}) and by the functions \code{abs},
+\code{sqrt}, \code{exp}, \code{log}, \code{sin}, \code{cos}, \code{tan}, \code{floor}, \code{ceiling} and
+\code{sign}. The result is a parameter expression, kept as a portable string
+(so it can be saved with \code{\link[=sim_write_json]{sim_write_json()}}) and evaluated at compile
+time. \code{sim_param_expr()} builds one directly from a string. References
+may also appear inside list parameters. A vector cannot hold
+references (R would drop their class); use an expression such as
+\code{sim_param_expr("c(a, 2 * a)")} instead.
+}
 \examples{
 m <- sim_model("decay", params = list(a = 2))
 sim_add_block(m, "integrator", "x", initial = 1)
@@ -29,4 +46,12 @@ sim_connect(m, "k", "neg")
 sim_connect(m, "neg", "x")
 plan <- sim_compile(m)
 sim_param_values(plan)
+
+# The same model with one gain: k = -a
+m2 <- sim_model("decay", params = list(a = 2))
+sim_add_block(m2, "integrator", "x", initial = 1)
+sim_add_block(m2, "gain", "k", gain = -sim_param("a"))
+sim_connect(m2, "x", "k")
+sim_connect(m2, "k", "x")
+sim_param_expr("-a / 2")
 }

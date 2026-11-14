@@ -145,7 +145,9 @@ num_str <- function(v) {
 
 enc <- function(v, where) {
   if (is.null(v)) return(list(`$null` = TRUE))
-  if (is_param_ref(v)) return(list(`$param` = v$name))
+  if (is_param_ref(v)) {
+    return(if (is.null(v$expr)) list(`$param` = v$name) else list(`$param_expr` = v$expr))
+  }
   if (inherits(v, "sim_model")) return(list(`$model` = sim_model_to_list(v)))
   if (inherits(v, "sim_transition")) {
     if (is.function(v$guard) || is.function(v$action)) {
@@ -187,6 +189,7 @@ dec <- function(x) {
   v <- switch(key,
     `$null` = NULL,
     `$param` = sim_param(x[[1]]),
+    `$param_expr` = sim_param_expr(x[[1]]),
     `$model` = sim_model_from_list(x[[1]]),
     `$transition` = {
       t <- x[[1]]

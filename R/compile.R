@@ -24,11 +24,18 @@
 #' each loop is solved at every evaluation by Newton iterations on the loop
 #' outputs, with a finite-difference Jacobian and backtracking; the run
 #' fails with an error when the residual does not fall below `loop_tol`.
+#' Every solve starts from `loop_guess` where given and from zero
+#' otherwise, so results never depend on the history of solver trial
+#' points. A loop with several solutions (for example `y = 4 / y`) is
+#' steered to one of them by its starting value.
 #'
 #' @param model A [sim_model()].
 #' @param algebraic_loops `"error"` (default) or `"solve"`.
 #' @param loop_tol Absolute residual tolerance for loop solving.
 #' @param loop_maxit Maximum Newton iterations per loop solve.
+#' @param loop_guess Optional named list of starting values for loop
+#'   solving, keyed by signal name (as in [sim_signal()]); each value has
+#'   the length of that signal.
 #' @return A `sim_plan` object. Use [sim_run()] to simulate it,
 #'   [sim_set_params()] to change parameters and [sim_diagnostics()] to
 #'   inspect the analysis.
@@ -57,15 +64,18 @@
 #' sim_signal(sim_run(plan2, c(0, 1), times = 1), "s") # y = 1 - 2y, so 1/3
 #' @export
 sim_compile <- function(model, algebraic_loops = c("error", "solve"),
-                        loop_tol = 1e-10, loop_maxit = 50) {
+                        loop_tol = 1e-10, loop_maxit = 50, loop_guess = NULL) {
   check_model(model)
   algebraic_loops <- match.arg(algebraic_loops)
   check_number(loop_tol, "`loop_tol`")
   if (!is_count(loop_maxit)) sim_abort("`loop_maxit` must be a positive integer.")
+  if (!is.null(loop_guess) && (!is.list(loop_guess) || is.null(names(loop_guess)))) {
+    sim_abort("`loop_guess` must be a named list of numeric values.")
+  }
   flat <- flatten_model(model)
   opts <- list(name = model$name, algebraic_loops = algebraic_loops,
                loop_tol = loop_tol, loop_maxit = as.integer(loop_maxit),
-               model_version = model$version)
+               loop_guess = loop_guess, model_version = model$version)
   compile_flat(flat, model$params, opts)
 }
 
@@ -76,11 +86,19 @@ compile_flat <- function(flat, params, opts, previous = NULL) {
   fb <- flat$blocks[bnames]
 
   # 1-2: resolve parameters and build definitions -----------------------
+  # A plan keeps the block types it was compiled with, so registering or
+  # replacing a type later never changes what sim_set_params() rebuilds.
+  if (is.null(flat$type_defs)) {
+    types <- unique(vapply(fb, `[[`, "", "type"))
+    flat$type_defs <- stats::setNames(lapply(types, get_block_type), types)
+  }
   defs <- lapply(fb, function(b) {
     sc <- b$scopes
     sc[[length(sc)]] <- params
     rp <- resolve_params(b$params, sc, b$name)
-    def <- build_block(get_block_type(b$type), rp, b$name)
+    tdef <- flat$type_defs[[b$type]]
+    if (isTRUE(tdef$scoped)) rp$.scope <- scope_values(rev(sc), params)
+    def <- build_block(tdef, rp, b$name)
     def$type <- b$type
     def$resolved <- rp
     def
@@ -165,7 +183,7 @@ compile_flat <- function(flat, params, opts, previous = NULL) {
   # 8: layouts -----------------------------------------------------------------
   layout <- layout_vectors(defs, sizes, bnames)
   blocks <- lapply(seq_len(nb), function(i) {
-    d <- defs[[i]]
+    d <- add_kinks(defs[[i]], sizes$inputs[[i]], bnames[i])
     in_idx <- lapply(seq_along(d$inputs), function(j) {
       layout$out_idx[[src[[i]][j, 1]]][[src[[i]][j, 2]]]
     })
@@ -189,11 +207,24 @@ compile_flat <- function(flat, params, opts, previous = NULL) {
 
   schedule <- lapply(comps, function(cmp) {
     if (length(cmp) == 1L && !(cmp[1] %in% adj[[cmp[1]]])) {
-      return(list(loop = FALSE, blocks = cmp))
+      b <- blocks[[cmp]]
+      return(list(loop = FALSE, blocks = cmp, discrete = b$discrete,
+                  has_bp = is.function(b$def$breakpoints), skip = !length(b$out_idx)))
     }
     list(loop = TRUE, blocks = cmp,
          z_idx = unlist(lapply(cmp, function(i) unlist(blocks[[i]]$out_idx))))
   })
+
+  guess <- rep(NA_real_, layout$nsig)
+  for (nm in names(opts$loop_guess)) {
+    idx <- signal_of[[nm]]
+    if (is.null(idx)) sim_abort("`loop_guess`: unknown signal '", nm, "'.")
+    v <- check_numeric(opts$loop_guess[[nm]], paste0("`loop_guess$", nm, "`"))
+    if (length(v) != length(idx)) {
+      sim_abort("`loop_guess$", nm, "` must have length ", length(idx), ".")
+    }
+    guess[idx] <- v
+  }
 
   held0 <- numeric(layout$nsig)
   for (b in blocks) held0 <- set_held0(b, layout$d0[b$d_idx], held0)
@@ -215,7 +246,8 @@ compile_flat <- function(flat, params, opts, previous = NULL) {
 
   structure(list(
     name = opts$name, opts = opts, flat = flat, params = params,
-    blocks = blocks, schedule = schedule,
+    blocks = blocks, schedule = schedule, loop_guess = guess,
+    continuous = which(vapply(blocks, function(b) length(b$x_idx) > 0L, TRUE)),
     signal_names = layout$signal_names, signal_of = signal_of,
     nsig = layout$nsig, nx = layout$nx, nd = layout$nd,
     x0 = layout$x0, d0 = layout$d0, held0 = held0,
@@ -380,17 +412,55 @@ sample_rates <- function(blocks) {
   list(table = tab, period = key[, 1], offset = key[, 2], block_rate = block_rate)
 }
 
+# Kinks are points where a memoryless block's output, or its slope, jumps
+# (the corners of a saturation, the switching point of a compare). A block
+# declares them with `kinks(t, x, d, u)` and `kink_size(in_sizes)`; they
+# become extra crossing functions whose only effect is to restart the
+# integrator exactly at the kink, so the right-hand side is smooth inside
+# every step. They are optional: methods without root finding ignore them.
+add_kinks <- function(d, in_sizes, name) {
+  d$zc_optional <- rep(FALSE, d$nzc)
+  if (!is.function(d$kinks)) return(d)
+  nk <- as.integer(d$kink_size(in_sizes))
+  if (length(nk) != 1L || is.na(nk) || nk < 0L) {
+    sim_abort("Block '", name, "': `kink_size` must return one count.")
+  }
+  if (!nk) return(d)
+  nz <- d$nzc
+  zc0 <- d$zc
+  on0 <- d$on_zc
+  kf <- d$kinks
+  d$zc <- function(t, x, dd, u) {
+    k <- as.numeric(kf(t, x, dd, u))
+    if (length(k) != nk) {
+      sim_abort("Block '", name, "': `kinks` returned ", length(k), " value(s), expected ", nk, ".")
+    }
+    c(if (nz) zc0(t, x, dd, u), k)
+  }
+  d$on_zc <- function(i, direction, t, x, dd, u) {
+    if (i > nz) list(silent = TRUE) else on0(i, direction, t, x, dd, u)
+  }
+  d$zc_direction <- c(if (nz) d$zc_direction, rep("either", nk))
+  d$zc_optional <- c(rep(FALSE, nz), rep(TRUE, nk))
+  d$nzc <- nz + nk
+  d
+}
+
 layout_zero_crossings <- function(blocks) {
   pos <- 0L
   idx <- vector("list", length(blocks))
   dirs <- character()
+  optional <- logical()
   for (i in seq_along(blocks)) {
     n <- blocks[[i]]$nzc
     idx[[i]] <- pos + seq_len(n)
     pos <- pos + n
-    if (n) dirs <- c(dirs, blocks[[i]]$def$zc_direction)
+    if (n) {
+      dirs <- c(dirs, blocks[[i]]$def$zc_direction)
+      optional <- c(optional, blocks[[i]]$def$zc_optional)
+    }
   }
-  list(block_idx = idx, n = pos, directions = dirs,
+  list(block_idx = idx, n = pos, directions = dirs, optional = optional,
        blocks = which(vapply(blocks, function(b) b$nzc > 0L, TRUE)))
 }
 
@@ -503,8 +573,15 @@ rate_notes <- function(blocks, src, bnames) {
 #' sim_states(sim_run(p2, c(0, 1), times = 1))
 #' @export
 sim_set_params <- function(plan, ...) {
+  fx <- exact_match_args(sys.call(), "plan", parent.frame())
+  if (is.null(fx)) {
+    new <- list(...)
+  } else {
+    if (is.null(fx$fixed$plan)) sim_abort("sim_set_params() needs `plan`.")
+    plan <- fx$fixed$plan
+    new <- fx$dots
+  }
   check_plan(plan)
-  new <- list(...)
   if (length(new) == 1L && is.null(names(new)) && is.list(new[[1]])) new <- new[[1]]
   check_param_list(new, "Parameters")
   unknown <- setdiff(names(new), names(plan$params))

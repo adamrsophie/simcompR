@@ -24,7 +24,8 @@
 #'
 #' Guards and actions are portable strings or R functions. A guard string
 #' is an expression in `u` (the input vector), `t`, `elapsed` (time in the
-#' current state) and the data variables. An action string assigns data
+#' current state), the data variables and the parameters of the enclosing
+#' model or subsystem. An action string assigns data
 #' variables, for example `"count <- count + 1"`. A guard function has
 #' signature `function(u, t, elapsed, data)` and returns `TRUE` or `FALSE`;
 #' an action function has signature `function(data, u, t)` and returns the
@@ -128,12 +129,12 @@ sim_check_state_machine <- function(states, transitions, initial = states[1]) {
   list(unreachable = setdiff(states, seen), absorbing = setdiff(states, from))
 }
 
-compile_action <- function(a, what) {
+compile_action <- function(a, what, scope = list()) {
   if (is.null(a)) return(NULL)
   if (is.function(a)) return(a)
   e <- parse_safe(a, what)
   function(data, u, t) {
-    env <- safe_frame(c(as.list(data), list(u = u, t = t)))
+    env <- safe_frame(c(scope, as.list(data), list(u = u, t = t)))
     eval(e, env)
     out <- vapply(names(data), function(n) as.numeric(get(n, envir = env))[1], 0)
     names(out) <- names(data)
@@ -141,11 +142,11 @@ compile_action <- function(a, what) {
   }
 }
 
-compile_guard <- function(g, what) {
+compile_guard <- function(g, what, scope = list()) {
   if (is.function(g)) return(g)
   e <- parse_safe(g, what)
   function(u, t, elapsed, data) {
-    v <- eval_safe(e, c(as.list(data), list(u = u, t = t, elapsed = elapsed)))
+    v <- eval_safe(e, c(scope, as.list(data), list(u = u, t = t, elapsed = elapsed)))
     if (length(v) != 1L || is.na(v)) sim_abort(what, " must evaluate to TRUE or FALSE.")
     isTRUE(as.logical(v))
   }
@@ -161,6 +162,7 @@ register_state_machine_block <- function() {
                   period = 1, offset = 0),
     required = "states",
     build = function(p) {
+      scope <- p$.scope %||% list()
       states <- p$states
       initial <- if (is.na(p$initial[1])) states[1] else p$initial
       sim_check_state_machine(states, p$transitions, initial)
@@ -176,14 +178,14 @@ register_state_machine_block <- function() {
       }
       acts <- lapply(c(entry = "entry", exit = "exit", during = "during"), function(kind) {
         lapply(stats::setNames(states, states), function(s) {
-          compile_action(p[[kind]][[s]], paste0("`", kind, "` action of '", s, "'"))
+          compile_action(p[[kind]][[s]], paste0("`", kind, "` action of '", s, "'"), scope)
         })
       })
       trs <- lapply(seq_along(p$transitions), function(i) {
         tr <- p$transitions[[i]]
         list(from = match(tr$from, states), to = match(tr$to, states), after = tr$after,
-             guard = compile_guard(tr$guard, paste0("Guard of transition ", i)),
-             action = compile_action(tr$action, paste0("Action of transition ", i)),
+             guard = compile_guard(tr$guard, paste0("Guard of transition ", i), scope),
+             action = compile_action(tr$action, paste0("Action of transition ", i), scope),
              key = c(if (is.na(tr$priority)) Inf else tr$priority, i))
       })
       ord <- order(vapply(trs, function(z) z$key[1], 0), vapply(trs, function(z) z$key[2], 0))

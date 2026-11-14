@@ -65,19 +65,20 @@ an algebraic loop and is reported at compile time.
 |------|----------|
 | Models | blocks, named and numbered ports, connections, model parameters, copies, editing |
 | Compilation | size propagation, direct-feedthrough graph, Tarjan components, deterministic order, plan reuse |
-| Continuous | integrator, transfer function, state space, general `ode` blocks; deSolve methods that can stop at given times (all but `radau`) |
+| Continuous | integrator, transfer function, state space, general and autonomous `ode` blocks; deSolve methods that can stop at given times (all but `radau` and `iteration`) |
 | Discrete | unit delay, zero-order hold, discrete integrators, discrete state space and transfer functions |
 | Multirate | several sample rates and offsets, exact hit times, outputs before updates, rate notes |
-| Hybrid | scheduled and zero-crossing events, resets, switch, relay, stop, event limits |
-| Algebraic loops | detection with a printed cycle; optional Newton solution with diagnostics |
-| Structure | reusable subsystems, nesting, parameter namespaces |
+| Hybrid | scheduled and zero-crossing events, resets, events on subsystem internals, located kinks of saturation and similar blocks, switch, relay, stop, event limits |
+| Algebraic loops | detection with a printed cycle; optional Newton solution with starting values and diagnostics |
+| Structure | reusable subsystems, nesting, parameter namespaces, parameter expressions |
 | Logic | state machines with guards, priorities, timed transitions, actions |
 | Experiments | parameter sweeps, Monte Carlo with fixed seeds, seeded noise, optional parallel runs |
 | Files | versioned JSON with exact numbers; non-portable content refused, expressions whitelisted |
 | Results | signals, states, events, data frames, plots, diagnostics, DOT export |
 
 Not implemented: graphical editing, code generation, physical (acausal)
-modeling, consistent DAE initialization. See the roadmap in `NEWS.md`.
+modeling, consistent DAE initialization, buses. See the known limitations
+and the roadmap in `NEWS.md`.
 
 ## Validation
 

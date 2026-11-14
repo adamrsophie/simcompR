@@ -34,6 +34,25 @@ sim_connect(second, "u", "G")
 plan <- sim_compile(second)
 ```
 
+Parameters can be combined where they are used. Writing the system with
+$\zeta$ and $\omega$ as parameters keeps the denominator in its textbook
+form; the expression is evaluated again for every run:
+
+```{r}
+named <- sim_model("second_order_zw", params = list(zeta = 0.2, w = 2))
+sim_add_block(named, "step", "u", time = 0)
+sim_add_block(named, "transfer_function", "G",
+              num = sim_param("w")^2,
+              den = sim_param_expr("c(1, 2 * zeta * w, w^2)"))
+sim_connect(named, "u", "G")
+zw <- sim_compile(named)
+peak_of <- function(p) max(sim_signal(sim_run(p, c(0, 15), times = seq(0, 15, 0.01)), "G"))
+c(zeta_0.2 = peak_of(zw), zeta_0.5 = peak_of(sim_set_params(zw, zeta = 0.5)))
+```
+
+Model parameters are also visible by name inside `expression` blocks and
+state machine guards and actions.
+
 ## Sweeps
 
 `sim_sweep()` takes a data frame with one row per run, or a list of named

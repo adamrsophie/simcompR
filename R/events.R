@@ -20,12 +20,19 @@
 #' time. Model parameters are also visible in string expressions. Only
 #' string resets can be saved with [sim_write_json()].
 #'
+#' A `signal` or reset target inside a subsystem instance is written as a
+#' path, `"instance/block"` (deeper levels add more `/` parts). A crossing
+#' whose function is exactly at `level` when a segment starts fires there
+#' when the signal moves away in the trigger direction (unless the same
+#' event has just fired at that instant).
+#'
 #' When several events fire at the same instant they are applied in
 #' increasing `priority`, then by name. Every reset sees the state left by
 #' the previous one.
 #'
 #' @param model A [sim_model()].
-#' @param name Unique event name.
+#' @param name Unique event name; for `sim_remove_event()`, the event to
+#'   remove.
 #' @param trigger A trigger from `sim_zero_crossing()` or `sim_at()`.
 #' @param reset Named list of state resets (see Details).
 #' @param terminal If `TRUE`, the simulation stops after the event.
@@ -36,7 +43,8 @@
 #' @param port Output port of `signal`.
 #' @param element Element of a vector signal.
 #' @param times Event times.
-#' @return `sim_add_event()` returns the model invisibly; the trigger
+#' @return `sim_add_event()` and `sim_remove_event()` return the model
+#'   invisibly; the trigger
 #'   constructors return trigger objects.
 #' @examples
 #' # Bouncing ball: h'' = -g, reverse and damp the velocity at impact.
@@ -65,13 +73,13 @@ sim_add_event <- function(model, name, trigger, reset = list(),
     sim_abort("`trigger` must come from sim_zero_crossing() or sim_at().")
   }
   if (trigger$kind == "zero_crossing") {
-    trigger$signal <- block_name_of(model, trigger$signal, "signal")
+    trigger$signal <- block_path_of(model, trigger$signal, "signal")
   }
   if (!is.list(reset) || (length(reset) && is.null(names(reset)))) {
     sim_abort("`reset` must be a named list of block resets.")
   }
   for (b in names(reset)) {
-    block_name_of(model, b, "reset target")
+    block_path_of(model, b, "reset target")
     r <- reset[[b]]
     if (is.character(r)) parse_safe(r, paste0("Reset of block '", b, "'"))
     else if (!is.function(r)) {
@@ -87,6 +95,17 @@ sim_add_event <- function(model, name, trigger, reset = list(),
   }
   model$events[[name]] <- list(name = name, trigger = trigger, reset = reset,
                                terminal = terminal, priority = priority)
+  touch(model)
+}
+
+#' @rdname sim_add_event
+#' @export
+sim_remove_event <- function(model, name) {
+  check_model(model)
+  if (!is.character(name) || length(name) != 1L || !name %in% names(model$events)) {
+    sim_abort("Model '", model$name, "' has no event named '", paste(name, collapse = ", "), "'.")
+  }
+  model$events[[name]] <- NULL
   touch(model)
 }
 

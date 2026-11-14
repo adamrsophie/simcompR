@@ -18,7 +18,7 @@ register_logic_blocks <- function() {
         op <- match.arg(p$op, names(compare_ops))
         thr <- check_number(p$threshold, "`threshold`")
         f <- compare_ops[[op]]
-        elementwise_block(function(v) as.numeric(f(v, thr)))
+        elementwise_block(function(v) as.numeric(f(v, thr)), kinks = function(v) v - thr)
       })
 
   reg("logic", category = "logic",

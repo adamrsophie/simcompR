@@ -42,6 +42,19 @@
 #'   component.
 #' * `breakpoints(t0, tf)`: times where the block's output is
 #'   discontinuous; the integrator restarts there.
+#' * `modes(t, x, d, u)`: for switching blocks whose output branch is
+#'   stored in the discrete state `d` (like `switch` and `relay`), returns
+#'   the mode for the current inputs. It is called at the start and at
+#'   every segment boundary, repeatedly until all modes settle, never
+#'   inside a segment; the crossing functions in `zc` move the mode inside a
+#'   segment.
+#' * `stop_if(t, x, d, u)`: returns `TRUE` to end the simulation; checked
+#'   at every boundary and after every event (see the `stop` block).
+#' * `kinks(t, x, d, u)` and `kink_size(in_sizes)`: crossing functions whose
+#'   zeros are points where a memoryless output or its slope jumps (the
+#'   corners of a saturation), and their number for the given input sizes.
+#'   The integrator restarts exactly at each kink; nothing is logged. They
+#'   are ignored by methods without root finding.
 #'
 #' All functions must be free of side effects: the solver calls them at
 #' trial points that it may later reject.
@@ -144,7 +157,19 @@ get_block_type <- function(type) {
 #' model. Changing a referenced parameter with [sim_set_params()] or
 #' [sim_sweep()] does not require editing the block.
 #'
+#' References can be combined with numbers and with each other by
+#' arithmetic (`-sim_param("a")`, `1 / sim_param("tau")`,
+#' `2 * sim_param("a") + sim_param("b")`) and by the functions `abs`,
+#' `sqrt`, `exp`, `log`, `sin`, `cos`, `tan`, `floor`, `ceiling` and
+#' `sign`. The result is a parameter expression, kept as a portable string
+#' (so it can be saved with [sim_write_json()]) and evaluated at compile
+#' time. `sim_param_expr()` builds one directly from a string. References
+#' may also appear inside list parameters. A vector cannot hold
+#' references (R would drop their class); use an expression such as
+#' `sim_param_expr("c(a, 2 * a)")` instead.
+#'
 #' @param name Parameter name.
+#' @param expr A portable expression (string) in parameter names.
 #' @return An object of class `sim_param`.
 #' @examples
 #' m <- sim_model("decay", params = list(a = 2))
@@ -156,6 +181,14 @@ get_block_type <- function(type) {
 #' sim_connect(m, "neg", "x")
 #' plan <- sim_compile(m)
 #' sim_param_values(plan)
+#'
+#' # The same model with one gain: k = -a
+#' m2 <- sim_model("decay", params = list(a = 2))
+#' sim_add_block(m2, "integrator", "x", initial = 1)
+#' sim_add_block(m2, "gain", "k", gain = -sim_param("a"))
+#' sim_connect(m2, "x", "k")
+#' sim_connect(m2, "k", "x")
+#' sim_param_expr("-a / 2")
 #' @export
 sim_param <- function(name) {
   if (!is.character(name) || length(name) != 1L || !nzchar(name)) {
@@ -164,9 +197,47 @@ sim_param <- function(name) {
   structure(list(name = name), class = "sim_param")
 }
 
+#' @rdname sim_param
+#' @export
+sim_param_expr <- function(expr) {
+  if (!is.character(expr) || length(expr) != 1L || !nzchar(expr)) {
+    sim_abort("`expr` must be a non-empty string.")
+  }
+  e <- parse_safe(expr, "Parameter expression")
+  vars <- setdiff(all.vars(e), c("pi", "TRUE", "FALSE"))
+  structure(list(name = NULL, expr = expr, vars = vars), class = "sim_param")
+}
+
+param_text <- function(v) if (is.null(v$expr)) v$name else paste0("(", v$expr, ")")
+
+#' @export
+Ops.sim_param <- function(e1, e2) {
+  if (!.Generic %in% c("+", "-", "*", "/", "^")) {
+    sim_abort("Operator `", .Generic, "` is not available for sim_param(); use +, -, *, / or ^.")
+  }
+  txt <- function(v) {
+    if (is_param_ref(v)) return(param_text(v))
+    if (is.numeric(v) && length(v) == 1L && is.finite(v)) return(sprintf("%.17g", v))
+    sim_abort("Arithmetic on sim_param() takes parameters and single finite numbers.")
+  }
+  sim_param_expr(if (missing(e2)) paste0(.Generic, txt(e1)) else
+    paste(txt(e1), .Generic, txt(e2)))
+}
+
+#' @export
+Math.sim_param <- function(x, ...) {
+  ok <- c("abs", "sqrt", "exp", "log", "sin", "cos", "tan", "floor", "ceiling", "sign")
+  if (!.Generic %in% ok || length(list(...))) {
+    sim_abort("Function `", .Generic, "` is not available for sim_param(); use one of ",
+              paste(ok, collapse = ", "), ".")
+  }
+  sim_param_expr(paste0(.Generic, "(", param_text(x), ")"))
+}
+
 #' @export
 print.sim_param <- function(x, ...) {
-  cat("<sim_param ", x$name, ">\n", sep = "")
+  if (is.null(x$expr)) cat("<sim_param ", x$name, ">\n", sep = "")
+  else cat("<sim_param expression ", x$expr, ">\n", sep = "")
   invisible(x)
 }
 
@@ -180,7 +251,20 @@ resolve_params <- function(params, scopes, block_name) {
 }
 
 resolve_value <- function(value, scopes, level, block_name) {
+  if (is.list(value) && !is.object(value)) {
+    return(lapply(value, resolve_value, scopes = scopes, level = level,
+                  block_name = block_name))
+  }
   if (!is_param_ref(value)) return(value)
+  if (!is.null(value$expr)) {
+    vals <- lapply(value$vars, function(n) resolve_value(sim_param(n), scopes, level, block_name))
+    names(vals) <- value$vars
+    return(tryCatch(eval_safe(parse_safe(value$expr, "Parameter expression"), vals),
+                    error = function(e) {
+                      sim_abort("Block '", block_name, "': parameter expression '",
+                                value$expr, "' failed: ", conditionMessage(e))
+                    }))
+  }
   name <- value$name
   for (i in seq.int(level, length.out = max(0L, length(scopes) - level + 1L))) {
     scope <- scopes[[i]]
@@ -195,6 +279,8 @@ resolve_value <- function(value, scopes, level, block_name) {
 # Build a block definition from a type and resolved parameters, normalizing
 # every optional field so the compiler can rely on them.
 build_block <- function(type_def, params, block_name) {
+  scope <- params$.scope
+  params$.scope <- NULL
   defaults <- type_def$params
   unknown <- setdiff(names(params), names(defaults))
   if (length(unknown)) {
@@ -204,6 +290,7 @@ build_block <- function(type_def, params, block_name) {
   }
   p <- defaults
   p[names(params)] <- params
+  if (isTRUE(type_def$scoped)) p$.scope <- scope
   missing <- setdiff(type_def$required, names(params))
   if (length(missing)) {
     sim_abort("Block '", block_name, "' (", type_def$type, "): required ",

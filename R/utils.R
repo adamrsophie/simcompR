@@ -65,6 +65,36 @@ time_tol <- function(tspan) {
   1e-12 * max(1, abs(tspan))
 }
 
+# R binds a named argument to a formal by partial matching when no formal
+# matches exactly, so a block parameter `n` would bind to `name`. This
+# re-matches the call with exact names only. It returns NULL when nothing
+# was matched partially, otherwise list(fixed = formals, dots = the rest).
+exact_match_args <- function(call, formal_names, env) {
+  args <- as.list(call)[-1L]
+  if (!length(args)) return(NULL)
+  nms <- names(args) %||% character(length(args))
+  exact <- nzchar(nms) & nms %in% formal_names
+  free <- setdiff(formal_names, nms[exact])
+  partial <- nzchar(nms) & !exact &
+    vapply(nms, function(n) any(startsWith(free, n)), TRUE)
+  if (!any(partial)) return(NULL)
+  if (any(vapply(args, identical, TRUE, quote(...)))) return(NULL)
+  vals <- lapply(args, eval, envir = env)
+  fixed <- list()
+  dots <- list()
+  for (i in seq_along(vals)) {
+    if (exact[i]) {
+      fixed[nms[i]] <- list(vals[[i]])
+    } else if (!nzchar(nms[i]) && length(free)) {
+      fixed[free[1]] <- list(vals[[i]])
+      free <- free[-1L]
+    } else {
+      dots <- c(dots, vals[i])
+    }
+  }
+  list(fixed = fixed, dots = dots)
+}
+
 # Merge sorted times that agree within tol. A cluster starts at its first
 # time and never extends beyond tol from it, so close times cannot chain
 # together. The cluster is represented by its largest time: a sample hit

@@ -16,11 +16,26 @@ broadcast_size <- function(sizes) {
 
 expand <- function(v, n) if (length(v) == n) v else rep(v, n)
 
-elementwise_block <- function(fun) {
-  list(inputs = NA, outputs = NA, feedthrough = TRUE,
-       size_out = function(n) n,
-       output = function(t, x, d, u) fun(u[[1]]))
+# `kinks(v)`, when given, returns the crossing functions of the input
+# vector v whose zeros are the kinks of `fun`; `per` is their number per
+# input element.
+elementwise_block <- function(fun, kinks = NULL, per = 1L) {
+  def <- list(inputs = NA, outputs = NA, feedthrough = TRUE,
+              size_out = function(n) n,
+              output = function(t, x, d, u) fun(u[[1]]))
+  if (!is.null(kinks) && per > 0L) {
+    def$kinks <- function(t, x, d, u) kinks(u[[1]])
+    def$kink_size <- function(n) per * n[[1]]
+  }
+  def
 }
+
+# Crossing functions for kinks of the math functions that have them.
+math_kinks <- list(
+  abs = function(v) v, sign = function(v) v,
+  floor = function(v) sin(pi * v), ceiling = function(v) sin(pi * v),
+  round = function(v) cos(pi * v)
+)
 
 math_functions <- list(
   exp = exp, log = log, log10 = log10, sqrt = sqrt,
@@ -106,7 +121,10 @@ register_math_blocks <- function() {
         lo <- check_number(p$lower, "`lower`", finite = FALSE)
         hi <- check_number(p$upper, "`upper`", finite = FALSE)
         if (lo > hi) sim_abort("`lower` must not exceed `upper`.")
-        elementwise_block(function(v) pmin(pmax(v, lo), hi))
+        bounds <- c(lo, hi)[is.finite(c(lo, hi))]
+        elementwise_block(function(v) pmin(pmax(v, lo), hi),
+                          kinks = function(v) as.numeric(outer(bounds, v, function(b, w) w - b)),
+                          per = length(bounds))
       })
 
   reg("dead_zone", category = "math",
@@ -116,11 +134,12 @@ register_math_blocks <- function() {
         lo <- check_number(p$lower, "`lower`")
         hi <- check_number(p$upper, "`upper`")
         if (lo > hi) sim_abort("`lower` must not exceed `upper`.")
-        elementwise_block(function(v) ifelse(v > hi, v - hi, ifelse(v < lo, v - lo, 0)))
+        elementwise_block(function(v) ifelse(v > hi, v - hi, ifelse(v < lo, v - lo, 0)),
+                          kinks = function(v) as.numeric(rbind(v - lo, v - hi)), per = 2L)
       })
 
   reg("abs", category = "math", description = "Absolute value",
-      build = function(p) elementwise_block(abs))
+      build = function(p) elementwise_block(abs, kinks = function(v) v))
 
   reg("math", category = "math",
       description = paste("Elementwise function:", paste(names(math_functions), collapse = ", ")),
@@ -130,7 +149,8 @@ register_math_blocks <- function() {
             !p$fun %in% names(math_functions)) {
           sim_abort("`fun` must be one of ", paste(names(math_functions), collapse = ", "), ".")
         }
-        elementwise_block(math_functions[[p$fun]])
+        k <- math_kinks[[p$fun]]
+        elementwise_block(math_functions[[p$fun]], kinks = k, per = if (is.null(k)) 0L else 1L)
       })
 
   reg("minmax", category = "math",
@@ -140,15 +160,30 @@ register_math_blocks <- function() {
         fun <- match.arg(p$fun, c("min", "max"))
         if (!is_count(p$n_inputs)) sim_abort("`n_inputs` must be a positive integer.")
         n <- as.integer(p$n_inputs)
+        # kinks where two candidates are equal
+        pair_diff <- function(cols) {
+          if (length(cols) < 2L) return(numeric())
+          pr <- utils::combn(length(cols), 2L)
+          as.numeric(unlist(lapply(seq_len(ncol(pr)), function(k) {
+            cols[[pr[1, k]]] - cols[[pr[2, k]]]
+          })))
+        }
         if (n == 1L) {
           f <- if (fun == "min") min else max
           return(list(inputs = NA, outputs = 1L, feedthrough = TRUE,
-                      output = function(t, x, d, u) f(u[[1]])))
+                      output = function(t, x, d, u) f(u[[1]]),
+                      kinks = function(t, x, d, u) pair_diff(as.list(u[[1]])),
+                      kink_size = function(s) choose(s[[1]], 2)))
         }
         f <- if (fun == "min") pmin else pmax
         list(inputs = rep(NA, n), outputs = NA, feedthrough = TRUE,
              size_out = function(s) broadcast_size(s),
-             output = function(t, x, d, u) do.call(f, u))
+             output = function(t, x, d, u) do.call(f, u),
+             kinks = function(t, x, d, u) {
+               m <- max(lengths(u))
+               pair_diff(lapply(u, expand, n = m))
+             },
+             kink_size = function(s) choose(n, 2) * broadcast_size(s))
       })
 
   reg("mux", category = "routing", description = "Concatenate inputs into one vector",
@@ -215,15 +250,17 @@ register_math_blocks <- function() {
           }
           y
         }
-        elementwise_block(f)
+        elementwise_block(f, kinks = function(v) as.numeric(outer(xs, v, function(b, w) w - b)),
+                          per = n)
       })
 
   reg("expression", category = "math",
-      description = "Portable expression in u (input vector) and t",
+      description = "Portable expression in u (input vector), t and model parameters",
       params = list(expr = NULL, size = NA),
       build = function(p) {
         e <- parse_safe(p$expr, "`expr`")
-        f <- function(t, v) as.numeric(eval_safe(e, list(u = v, t = t)))
+        scope <- p$.scope %||% list()
+        f <- function(t, v) as.numeric(eval_safe(e, c(scope, list(u = v, t = t))))
         size <- p$size
         list(inputs = NA, outputs = if (is.na(size)) NA else as.integer(size),
              feedthrough = TRUE,

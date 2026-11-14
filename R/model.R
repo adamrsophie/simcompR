@@ -75,6 +75,16 @@ touch <- function(model) {
 #' b
 #' @export
 sim_add_block <- function(model, type, name, ...) {
+  fx <- exact_match_args(sys.call(), c("model", "type", "name"), parent.frame())
+  if (is.null(fx)) {
+    params <- list(...)
+  } else {
+    if (!all(c("model", "type", "name") %in% names(fx$fixed))) {
+      sim_abort("sim_add_block() needs `model`, `type` and `name`.")
+    }
+    model <- fx$fixed$model; type <- fx$fixed$type; name <- fx$fixed$name
+    params <- fx$dots
+  }
   check_model(model)
   if (!is.character(name) || length(name) != 1L || !nzchar(name) ||
       grepl("/", name, fixed = TRUE)) {
@@ -84,7 +94,6 @@ sim_add_block <- function(model, type, name, ...) {
     sim_abort("Model '", model$name, "' already has a block named '", name, "'.")
   }
   type_def <- get_block_type(type)
-  params <- list(...)
   if (length(params) && (is.null(names(params)) || any(!nzchar(names(params))))) {
     sim_abort("Block parameters must be named.")
   }
@@ -132,6 +141,32 @@ block_name_of <- function(model, block, what) {
   }
   if (!block %in% names(model$blocks)) {
     sim_abort("Model '", model$name, "' has no block named '", block, "'.")
+  }
+  block
+}
+
+# A block of the model or, written "instance/block", a block inside a
+# subsystem instance (any depth). Returns the path.
+block_path_of <- function(model, block, what) {
+  if (inherits(block, "sim_block")) block <- block$name
+  if (!is.character(block) || length(block) != 1L) {
+    sim_abort("`", what, "` must be a block name or a sim_block handle.")
+  }
+  parts <- strsplit(block, "/", fixed = TRUE)[[1]]
+  cur <- model
+  for (i in seq_along(parts)) {
+    b <- cur$blocks[[parts[i]]]
+    if (is.null(b)) {
+      sim_abort("Model '", cur$name, "' has no block named '", parts[i], "'",
+                if (length(parts) > 1L) paste0(" (in path '", block, "')"), ".")
+    }
+    if (i < length(parts)) {
+      if (b$type != "subsystem") {
+        sim_abort("'", paste(parts[seq_len(i)], collapse = "/"), "' in path '", block,
+                  "' is not a subsystem instance.")
+      }
+      cur <- b$params$system
+    }
   }
   block
 }
@@ -249,10 +284,19 @@ sim_remove_block <- function(model, block) {
 #' sim_set_block_params(m, "k", gain = 5)
 #' @export
 sim_set_block_params <- function(model, block, ...) {
+  fx <- exact_match_args(sys.call(), c("model", "block"), parent.frame())
+  if (is.null(fx)) {
+    new <- list(...)
+  } else {
+    if (!all(c("model", "block") %in% names(fx$fixed))) {
+      sim_abort("sim_set_block_params() needs `model` and `block`.")
+    }
+    model <- fx$fixed$model; block <- fx$fixed$block
+    new <- fx$dots
+  }
   check_model(model)
   block <- block_name_of(model, block, "block")
   b <- model$blocks[[block]]
-  new <- list(...)
   type_def <- get_block_type(b$type)
   unknown <- setdiff(names(new), names(type_def$params))
   if (length(unknown)) {

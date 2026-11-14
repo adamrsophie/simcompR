@@ -141,8 +141,13 @@ sim_times <- function(result) {
 
 #' @export
 as.data.frame.sim_result <- function(x, row.names = NULL, optional = FALSE, ...) {
-  data.frame(time = x$time, x$signals, x$states, check.names = FALSE,
-             row.names = row.names)
+  # signals keep their names; states are prefixed so no column name repeats
+  st <- x$states
+  colnames(st) <- paste0("state:", colnames(st), recycle0 = TRUE)
+  ds <- x$discrete
+  colnames(ds) <- paste0("dstate:", colnames(ds), recycle0 = TRUE)
+  data.frame(time = x$time, kind = x$kind, x$signals, st, ds, check.names = FALSE,
+             row.names = row.names, stringsAsFactors = FALSE)
 }
 
 #' @export

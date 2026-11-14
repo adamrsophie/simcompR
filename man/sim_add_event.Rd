@@ -2,6 +2,7 @@
 % Please edit documentation in R/events.R
 \name{sim_add_event}
 \alias{sim_add_event}
+\alias{sim_remove_event}
 \alias{sim_zero_crossing}
 \alias{sim_at}
 \title{Model events: zero crossings, scheduled times and state resets}
@@ -14,6 +15,8 @@ sim_add_event(
   terminal = FALSE,
   priority = 0
 )
+
+sim_remove_event(model, name)
 
 sim_zero_crossing(
   signal,
@@ -28,7 +31,8 @@ sim_at(times)
 \arguments{
 \item{model}{A \code{\link[=sim_model]{sim_model()}}.}
 
-\item{name}{Unique event name.}
+\item{name}{Unique event name; for \code{sim_remove_event()}, the event to
+remove.}
 
 \item{trigger}{A trigger from \code{sim_zero_crossing()} or \code{sim_at()}.}
 
@@ -51,7 +55,8 @@ sim_at(times)
 \item{times}{Event times.}
 }
 \value{
-\code{sim_add_event()} returns the model invisibly; the trigger
+\code{sim_add_event()} and \code{sim_remove_event()} return the model
+invisibly; the trigger
 constructors return trigger objects.
 }
 \description{
@@ -75,6 +80,12 @@ for continuous blocks, discrete states otherwise), \code{s} is a named list of
 all block outputs at the event time (before the reset), and \code{t} is the
 time. Model parameters are also visible in string expressions. Only
 string resets can be saved with \code{\link[=sim_write_json]{sim_write_json()}}.
+
+A \code{signal} or reset target inside a subsystem instance is written as a
+path, \code{"instance/block"} (deeper levels add more \code{/} parts). A crossing
+whose function is exactly at \code{level} when a segment starts fires there
+when the signal moves away in the trigger direction (unless the same
+event has just fired at that instant).
 
 When several events fire at the same instant they are applied in
 increasing \code{priority}, then by name. Every reset sees the state left by

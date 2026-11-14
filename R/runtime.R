@@ -3,10 +3,21 @@
 # that are later rejected.
 
 block_inputs <- function(b, sig) {
+  n <- length(b$in_idx)
+  if (n == 1L) return(list(sig[b$in_idx[[1L]]]))
+  if (!n) return(list())
   lapply(b$in_idx, function(i) sig[i])
 }
 
 write_outputs <- function(b, y, sig, strict = FALSE) {
+  # fast path: one port, a plain numeric vector of the right length
+  if (!is.list(y) && length(b$out_idx) == 1L && is.double(y) && is.null(dim(y))) {
+    idx <- b$out_idx[[1L]]
+    if (length(y) == length(idx) && !(strict && anyNA(y))) {
+      sig[idx] <- y
+      return(sig)
+    }
+  }
   if (!is.list(y)) y <- list(y)
   if (length(y) != length(b$out_idx)) {
     sim_abort("Block '", b$name, "' returned ", length(y), " output(s), expected ",
@@ -69,11 +80,12 @@ evaluate <- function(plan, t, x, d, held, ticking = NULL, refresh = FALSE,
   loop_info <- NULL
   for (item in plan$schedule) {
     if (!item$loop) {
+      if (item$skip) next
+      if (item$discrete && (is.null(ticking) || !ticking[item$blocks])) next
       b <- blocks[[item$blocks]]
-      if (b$discrete && (is.null(ticking) || !ticking[item$blocks])) next
       # sources with breakpoints show their left limit at a segment's end
-      tb <- if (t > t_left && is.function(b$def$breakpoints)) t_left else t
-      if (length(b$out_idx)) sig <- eval_block(b, tb, x, d, sig)
+      tb <- if (item$has_bp && t > t_left) t_left else t
+      sig <- eval_block(b, tb, x, d, sig)
       next
     }
     res <- solve_loop(plan, item, t, x, d, sig, ticking)
@@ -105,9 +117,17 @@ solve_loop <- function(plan, item, t, x, d, sig, ticking) {
     out[zi] - z
   }
   tol <- plan$opts$loop_tol
+  loop_name <- paste0("Algebraic loop {", paste(names(blocks), collapse = ", "), "} at t = ",
+                      format(t))
   z <- sig[zi]
+  g <- plan$loop_guess[zi]
+  if (length(g)) z[!is.na(g)] <- g[!is.na(g)]
   r <- F(z)
   nr <- max(abs(r))
+  if (!is.finite(nr)) {
+    sim_abort(loop_name, ": the residual is not finite (NaN or infinite) at the ",
+              "starting point; give a starting value with sim_compile(loop_guess = ).")
+  }
   it <- 0L
   while (nr > tol && it < plan$opts$loop_maxit) {
     it <- it + 1L
@@ -118,11 +138,15 @@ solve_loop <- function(plan, item, t, x, d, sig, ticking) {
       zp <- z; zp[j] <- zp[j] + h
       J[, j] <- (F(zp) - r) / h
     }
+    if (!all(is.finite(J))) {
+      sim_abort(loop_name, ": the residual is not finite near the current iterate; ",
+                "give a starting value with sim_compile(loop_guess = ).")
+    }
     step <- tryCatch(qr.solve(J, -r), error = function(e) NULL)
     if (is.null(step)) {
-      sim_abort("Algebraic loop {", paste(names(blocks), collapse = ", "),
-                "} at t = ", format(t), ": singular Jacobian, the loop has no ",
-                "unique solution.")
+      sim_abort(loop_name, ": singular Jacobian at the current iterate. The loop may ",
+                "have no unique solution, or the start is at a stationary point; ",
+                "give a starting value with sim_compile(loop_guess = ).")
     }
     lambda <- 1
     repeat {
@@ -135,8 +159,7 @@ solve_loop <- function(plan, item, t, x, d, sig, ticking) {
     z <- zn; r <- rn; nr <- max(abs(r))
   }
   if (!is.finite(nr) || nr > tol) {
-    sim_abort("Algebraic loop {", paste(names(blocks), collapse = ", "),
-              "} at t = ", format(t), " did not converge: residual ",
+    sim_abort(loop_name, " did not converge: residual ",
               format(nr), " after ", it, " iteration(s).")
   }
   s <- sig
@@ -146,8 +169,8 @@ solve_loop <- function(plan, item, t, x, d, sig, ticking) {
 
 derivatives <- function(plan, t, x, d, sig) {
   dx <- numeric(plan$nx)
-  for (b in plan$blocks) {
-    if (!length(b$x_idx)) next
+  for (i in plan$continuous) {
+    b <- plan$blocks[[i]]
     v <- as.numeric(b$def$deriv(t, x[b$x_idx], d[b$d_idx], block_inputs(b, sig)))
     if (length(v) != length(b$x_idx)) {
       sim_abort("Block '", b$name, "' returned ", length(v), " derivative(s), expected ",

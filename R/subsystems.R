@@ -95,6 +95,32 @@ register_subsystem_blocks <- function() {
       })
 }
 
+# Names a subsystem may read from its scope: parameter references and the
+# free variables of string expressions (block parameters, event resets,
+# state machine guards and actions), at any depth.
+referenced_params <- function(model) {
+  out <- character()
+  walk <- function(v) {
+    if (inherits(v, "sim_param")) {
+      out <<- c(out, if (is.null(v$expr)) v$name else v$vars)
+    } else if (inherits(v, "sim_model")) {
+      out <<- c(out, names(v$params), referenced_params(v))
+    } else if (inherits(v, "sim_transition")) {
+      walk(v$guard); walk(v$action)
+    } else if (is.character(v)) {
+      for (s in v) {
+        e <- tryCatch(str2lang(s), error = function(e) NULL)
+        if (!is.null(e)) out <<- c(out, all.vars(e))
+      }
+    } else if (is.list(v)) {
+      for (el in v) walk(el)
+    }
+  }
+  for (b in model$blocks) walk(b$params)
+  for (e in model$events) walk(e$reset)
+  unique(out)
+}
+
 # Flatten a model into a list of leaf blocks and connections. Each flat block
 # keeps its raw parameters and the chain of parameter scopes it lives in.
 flatten_model <- function(model, prefix = "", scopes = list(), depth = 0L) {
@@ -128,6 +154,13 @@ flatten_model <- function(model, prefix = "", scopes = list(), depth = 0L) {
     }
     inst <- b$params$params %||% list()
     check_param_list(inst, paste0("Block '", full, "': `params`"))
+    unused <- setdiff(names(inst), c(names(sys$params), referenced_params(sys)))
+    if (length(unused)) {
+      sim_abort("Block '", full, "': instance parameter(s) ", paste(unused, collapse = ", "),
+                " are neither parameters of subsystem '", sys$name,
+                "' nor used inside it. Subsystem parameters: ",
+                if (length(sys$params)) paste(names(sys$params), collapse = ", ") else "none", ".")
+    }
     # instance parameters override the subsystem defaults; both form the
     # innermost scope of the subsystem's blocks
     sub_params <- sys$params

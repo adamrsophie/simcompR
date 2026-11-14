@@ -8,7 +8,8 @@ sim_compile(
   model,
   algebraic_loops = c("error", "solve"),
   loop_tol = 1e-10,
-  loop_maxit = 50
+  loop_maxit = 50,
+  loop_guess = NULL
 )
 }
 \arguments{
@@ -19,6 +20,10 @@ sim_compile(
 \item{loop_tol}{Absolute residual tolerance for loop solving.}
 
 \item{loop_maxit}{Maximum Newton iterations per loop solve.}
+
+\item{loop_guess}{Optional named list of starting values for loop
+solving, keyed by signal name (as in \code{\link[=sim_signal]{sim_signal()}}); each value has
+the length of that signal.}
 }
 \value{
 A \code{sim_plan} object. Use \code{\link[=sim_run]{sim_run()}} to simulate it,
@@ -53,6 +58,10 @@ Algebraic loops are rejected by default. With \code{algebraic_loops = "solve"}
 each loop is solved at every evaluation by Newton iterations on the loop
 outputs, with a finite-difference Jacobian and backtracking; the run
 fails with an error when the residual does not fall below \code{loop_tol}.
+Every solve starts from \code{loop_guess} where given and from zero
+otherwise, so results never depend on the history of solver trial
+points. A loop with several solutions (for example \code{y = 4 / y}) is
+steered to one of them by its starting value.
 }
 \examples{
 m <- sim_model("feedback")

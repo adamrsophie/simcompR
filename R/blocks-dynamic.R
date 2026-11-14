@@ -115,7 +115,7 @@ register_dynamic_blocks <- function() {
   reg("ode", category = "continuous", portable = FALSE,
       description = "General dx/dt = f(t, x, u), y = g(t, x, u) from R functions (not portable)",
       params = list(deriv = NULL, output = NULL, initial = NULL,
-                    feedthrough = FALSE, size = NA),
+                    feedthrough = FALSE, size = NA, n_inputs = 1),
       required = c("deriv", "initial"),
       build = function(p) {
         f <- p$deriv
@@ -126,12 +126,18 @@ register_dynamic_blocks <- function() {
         x0 <- check_numeric(p$initial, "`initial`")
         ft <- isTRUE(p$feedthrough)
         size <- p$size
-        list(inputs = NA, outputs = if (is.na(size)) NA else as.integer(size),
-             feedthrough = ft, nx = length(x0), x0 = x0,
-             size_out = function(n) length(g(0, x0, numeric(n))),
-             output = function(t, x, d, u) as.numeric(g(t, x, u[[1]])),
+        # n_inputs = 0 gives an autonomous system; u is then numeric(0)
+        nin <- p$n_inputs
+        if (!(identical(as.numeric(nin), 0) || is_count(nin)) || nin > 1) {
+          sim_abort("`n_inputs` must be 0 or 1.")
+        }
+        uin <- function(u) if (nin) u[[1]] else numeric()
+        list(inputs = rep(NA, nin), outputs = if (is.na(size)) NA else as.integer(size),
+             feedthrough = rep(ft, nin), nx = length(x0), x0 = x0,
+             size_out = function(n) length(g(0, x0, numeric(if (length(n)) n[[1]] else 0L))),
+             output = function(t, x, d, u) as.numeric(g(t, x, uin(u))),
              deriv = function(t, x, d, u) {
-               dx <- as.numeric(f(t, x, u[[1]]))
+               dx <- as.numeric(f(t, x, uin(u)))
                if (length(dx) != length(x0)) {
                  sim_abort("`deriv` returned ", length(dx), " values, expected ",
                            length(x0), ".")

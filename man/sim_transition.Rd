@@ -54,7 +54,8 @@ hit depend on the inputs at the same hit (direct feedthrough).
 
 Guards and actions are portable strings or R functions. A guard string
 is an expression in \code{u} (the input vector), \code{t}, \code{elapsed} (time in the
-current state) and the data variables. An action string assigns data
+current state), the data variables and the parameters of the enclosing
+model or subsystem. An action string assigns data
 variables, for example \code{"count <- count + 1"}. A guard function has
 signature \verb{function(u, t, elapsed, data)} and returns \code{TRUE} or \code{FALSE};
 an action function has signature \verb{function(data, u, t)} and returns the

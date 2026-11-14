@@ -78,6 +78,19 @@ functions and their handler, which returns \code{list(d = , x = , terminal = )}.
 component.
 \item \code{breakpoints(t0, tf)}: times where the block's output is
 discontinuous; the integrator restarts there.
+\item \code{modes(t, x, d, u)}: for switching blocks whose output branch is
+stored in the discrete state \code{d} (like \code{switch} and \code{relay}), returns
+the mode for the current inputs. It is called at the start and at
+every segment boundary, repeatedly until all modes settle, never
+inside a segment; the crossing functions in \code{zc} move the mode inside a
+segment.
+\item \code{stop_if(t, x, d, u)}: returns \code{TRUE} to end the simulation; checked
+at every boundary and after every event (see the \code{stop} block).
+\item \code{kinks(t, x, d, u)} and \code{kink_size(in_sizes)}: crossing functions whose
+zeros are points where a memoryless output or its slope jumps (the
+corners of a saturation), and their number for the given input sizes.
+The integrator restarts exactly at each kink; nothing is logged. They
+are ignored by methods without root finding.
 }
 
 All functions must be free of side effects: the solver calls them at
