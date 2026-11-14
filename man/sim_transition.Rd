@@ -45,6 +45,9 @@ time;
 state.
 }
 
+The entry action of the initial state runs at the first sample hit,
+before transitions are considered, with the inputs and time of that hit.
+
 At most one transition fires per sample hit, so evaluation never loops.
 Outputs are computed after the transition, which means the outputs at a
 hit depend on the inputs at the same hit (direct feedthrough).

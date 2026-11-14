@@ -101,8 +101,11 @@ register_source_blocks <- function() {
         list(outputs = 1L,
              output = function(t, x, d, u) {
                if (t < del) return(0)
-               k <- floor((t - del) / per + 1e-12)
-               if (t - del - k * per < w * per) a else 0
+               # compare with the breakpoint times exactly as they are computed
+               k <- floor((t - del) / per)
+               while (del + (k + 1) * per <= t) k <- k + 1
+               while (k > 0 && del + k * per > t) k <- k - 1
+               if (t < del + (k + w) * per) a else 0
              },
              breakpoints = function(t0, tf) {
                k <- seq.int(max(0, floor((t0 - del) / per)),
@@ -184,16 +187,22 @@ register_source_blocks <- function() {
 }
 
 # Run expr with a temporary seed and restore the caller's random stream.
+# Evaluate expr with a fixed generator configuration (Mersenne-Twister,
+# Inversion, Rejection), so that results do not depend on the caller's
+# RNGkind(), then restore the caller's kinds and stream.
 with_seed <- function(seed, expr) {
   genv <- globalenv()
   had <- exists(".Random.seed", envir = genv, inherits = FALSE)
   if (had) old <- get(".Random.seed", envir = genv, inherits = FALSE)
+  kinds <- RNGkind()
   on.exit({
+    suppressWarnings(RNGkind(kinds[1], kinds[2], kinds[3]))
     if (had) assign(".Random.seed", old, envir = genv)
     else if (exists(".Random.seed", envir = genv, inherits = FALSE)) {
       rm(".Random.seed", envir = genv)
     }
   })
-  set.seed(seed %% .Machine$integer.max)
+  set.seed(seed %% .Machine$integer.max, kind = "Mersenne-Twister",
+           normal.kind = "Inversion", sample.kind = "Rejection")
   expr
 }

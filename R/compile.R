@@ -172,6 +172,7 @@ compile_flat <- function(flat, params, opts, previous = NULL) {
     list(name = bnames[i], type = d$type, def = d,
          in_idx = in_idx, out_idx = layout$out_idx[[i]],
          x_idx = layout$x_idx[[i]], d_idx = layout$d_idx[[i]],
+         sizes_out = sizes$out[[i]],
          discrete = !is.null(d$sample), has_modes = is.function(d$modes),
          nzc = d$nzc)
   })
@@ -195,21 +196,7 @@ compile_flat <- function(flat, params, opts, previous = NULL) {
   })
 
   held0 <- numeric(layout$nsig)
-  for (b in blocks) {
-    if (!b$discrete || !length(b$out_idx)) next
-    h <- if (is.function(b$def$held0)) b$def$held0(sizes$out[[b$name]]) else 0
-    if (!is.list(h)) h <- list(h)
-    for (j in seq_along(b$out_idx)) {
-      v <- as.numeric(h[[min(j, length(h))]])
-      n <- length(b$out_idx[[j]])
-      if (length(v) == 1L) v <- rep(v, n)
-      if (length(v) != n) {
-        sim_abort("Block '", b$name, "': initial held output has length ",
-                  length(v), ", expected ", n, ".")
-      }
-      held0[b$out_idx[[j]]] <- v
-    }
-  }
+  for (b in blocks) held0 <- set_held0(b, layout$d0[b$d_idx], held0)
 
   rates <- sample_rates(blocks)
   zc <- layout_zero_crossings(blocks)
@@ -312,6 +299,20 @@ propagate_sizes <- function(defs, src, bnames) {
               paste(unresolved, collapse = ", "),
               ". A feedback loop needs at least one block with a known output size.")
   }
+  # A partial pass inside a loop may have guessed an output size before all
+  # input sizes were known. Check every inferred size against the final
+  # input sizes; report a clear error instead of failing at run time.
+  for (i in seq_len(nb)) {
+    f <- defs[[i]]$size_out
+    if (!is.function(f)) next
+    final <- tryCatch(suppressWarnings(as.integer(f(ins[[i]]))), error = function(e) NULL)
+    if (!is.null(final) && length(final) == length(outs[[i]]) && any(final != outs[[i]])) {
+      sim_abort("Block '", bnames[i], "': output size inferred inside a feedback loop (",
+                paste(outs[[i]], collapse = ", "), ") does not match its final input sizes (",
+                paste(final, collapse = ", "), "). Declare the sizes, for example with a ",
+                "constant of the right length or a block parameter.")
+    }
+  }
   for (i in seq_len(nb)) {
     f <- defs[[i]]$check_sizes
     if (is.function(f)) {
@@ -336,6 +337,10 @@ layout_vectors <- function(defs, sizes, bnames) {
     out_idx[[i]] <- lapply(seq_along(so), function(j) pos + sum(so[seq_len(j - 1L)]) + seq_len(so[j]))
     for (j in seq_along(so)) {
       nm <- if (length(so) == 1L) bnames[i] else paste0(bnames[i], ".", d$output_names[j])
+      if (!is.null(signal_of[[nm]])) {
+        sim_abort("Signal name '", nm, "' is used twice (a block name collides with ",
+                  "the name of another block's output port); rename one of them.")
+      }
       sig_names <- c(sig_names, element_names(nm, so[j]))
       signal_of[[nm]] <- out_idx[[i]][[j]]
     }
@@ -569,4 +574,26 @@ print.sim_plan <- function(x, ...) {
     cat("Zero-crossing functions: ", x$zc$n, "; events: ", length(x$events), "\n", sep = "")
   }
   invisible(x)
+}
+
+# Held outputs of a discrete block before its first sample hit. `held0` may
+# take the initial discrete state as a second argument, so that overriding
+# the state in sim_run(initial = ) also changes what the block shows.
+set_held0 <- function(b, d0, held) {
+  if (!b$discrete || !length(b$out_idx)) return(held)
+  h <- if (!is.function(b$def$held0)) 0 else
+    if (length(formals(b$def$held0)) >= 2L) b$def$held0(b$sizes_out, d0) else
+      b$def$held0(b$sizes_out)
+  if (!is.list(h)) h <- list(h)
+  for (j in seq_along(b$out_idx)) {
+    v <- as.numeric(h[[min(j, length(h))]])
+    n <- length(b$out_idx[[j]])
+    if (length(v) == 1L) v <- rep(v, n)
+    if (length(v) != n) {
+      sim_abort("Block '", b$name, "': initial held output has length ",
+                length(v), ", expected ", n, ".")
+    }
+    held[b$out_idx[[j]]] <- v
+  }
+  held
 }

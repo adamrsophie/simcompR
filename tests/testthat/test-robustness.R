@@ -1,0 +1,210 @@
+test_that("portable expressions cannot reach arbitrary functions", {
+  expect_error(simcompR:::parse_safe("(stop)('x')", "e"), "computed function")
+  expect_error(simcompR:::parse_safe("{ sum <- c; 1 }", "e"), "must not assign")
+  expect_error(simcompR:::parse_safe("system('ls')", "e"), "not allowed")
+  expect_error(simcompR:::eval_safe(quote(get("system")), list()))
+  # a model file with a bypass in a state machine action is refused on load
+  m <- sim_model()
+  sim_add_block(m, "constant", "c")
+  sim_add_block(m, "state_machine", "sm", states = "a", data = c(n = 0),
+                entry = list(a = "n <- 1"))
+  sim_connect(m, "c", "sm")
+  x <- sim_model_to_list(m)
+  x$blocks[[2]]$params$entry$`$list`[[1]]$`$chr`[[1]] <- "(stop)('bypass')"
+  expect_error(sim_model_from_list(x), "computed function")
+})
+
+test_that("state machine entry runs at the first hit with real inputs and time", {
+  m <- sim_model()
+  sim_add_block(m, "constant", "c", value = 7)
+  sim_add_block(m, "state_machine", "sm", states = "a", data = c(n = 0),
+                entry = list(a = "n <- u[1] + t"))
+  sim_connect(m, "c", "sm")
+  r <- sim_run(sim_compile(m), c(5, 6))
+  expect_equal(unname(tail(sim_signal(r, "sm.data"), 1)), 12)
+})
+
+test_that("algebraic loops through sampled blocks hold the sampled output", {
+  m <- sim_model()
+  sim_add_block(m, "constant", "u", value = 1)
+  sim_add_block(m, "subtract", "s")
+  sim_add_block(m, "zero_order_hold", "h", period = 1)
+  sim_connect(m, "u", "s", input = 1)
+  sim_connect(m, "h", "s", input = 2)
+  sim_connect(m, "s", "h")
+  r <- sim_run(sim_compile(m, algebraic_loops = "solve"), c(0, 2), times = c(0, 0.5, 1.5),
+               include_ticks = FALSE)
+  expect_equal(unname(sim_signal(r, "s")), rep(0.5, 3), tolerance = 1e-9)
+})
+
+test_that("mode initialization does not depend on block names", {
+  for (nm in c("a", "zz")) {
+    m <- sim_model()
+    sim_add_block(m, "constant", "m", value = 1)
+    sim_add_block(m, "relay", nm)
+    sim_connect(m, "m", nm)
+    expect_equal(unname(sim_signal(sim_run(sim_compile(m), c(0, 1), times = 1), nm)), 1)
+  }
+  # a strict switch at equality takes the third input
+  m <- sim_model()
+  for (v in c(10, 0, 20)) sim_add_block(m, "constant", paste0("c", v), value = v)
+  sim_add_block(m, "switch", "sw", threshold = 0, criterion = ">")
+  sim_connect(m, "c10", "sw", input = 1)
+  sim_connect(m, "c0", "sw", input = 2)
+  sim_connect(m, "c20", "sw", input = 3)
+  expect_equal(unname(sim_signal(sim_run(sim_compile(m), c(0, 1), times = 1), "sw")), 20)
+})
+
+test_that("crossings caused by jumps or reaching a boundary are not lost", {
+  counter <- function(m, signal, level = 0, direction = "either") {
+    sim_add_block(m, "integrator", "count")
+    sim_add_block(m, "constant", "zero", value = 0)
+    sim_connect(m, "zero", "count")
+    sim_add_event(m, "e", sim_zero_crossing(signal, level = level, direction = direction),
+                  reset = list(count = "x + 1"))
+    m
+  }
+  m <- sim_model()
+  sim_add_block(m, "step", "u", time = 1, before = -1, after = 1)
+  r <- sim_run(sim_compile(counter(m, "u", direction = "rising")), c(0, 2))
+  expect_equal(unname(tail(sim_signal(r, "count"), 1)), 1)
+  expect_equal(sim_events(r)$time, 1)
+
+  m <- sim_model()
+  sim_add_block(m, "time", "t")
+  sim_add_block(m, "zero_order_hold", "h", period = 1)
+  sim_connect(m, "t", "h")
+  r <- sim_run(sim_compile(counter(m, "t", level = 1)), c(0, 2))
+  expect_equal(unname(tail(sim_signal(r, "count"), 1)), 1)
+})
+
+test_that("simultaneous events see the effects of earlier handlers", {
+  m <- sim_model()
+  sim_add_block(m, "time", "t")
+  sim_add_block(m, "constant", "z", value = 0)
+  sim_add_block(m, "integrator", "a", initial = 1)
+  sim_add_block(m, "integrator", "b")
+  sim_connect(m, "z", "a")
+  sim_connect(m, "z", "b")
+  sim_add_event(m, "e1", sim_zero_crossing("t", level = 0.5), reset = list(a = "2"), priority = 0)
+  sim_add_event(m, "e2", sim_zero_crossing("t", level = 0.5), reset = list(b = "s[['a']]"),
+                priority = 1)
+  expect_equal(unname(tail(sim_signal(sim_run(sim_compile(m), c(0, 1)), "b"), 1)), 2)
+})
+
+test_that("scheduled terminal events record the terminal state", {
+  m <- sim_model()
+  sim_add_block(m, "constant", "one")
+  sim_add_block(m, "integrator", "x")
+  sim_connect(m, "one", "x")
+  sim_add_event(m, "end", sim_at(1), reset = list(x = "10"), terminal = TRUE)
+  r <- sim_run(sim_compile(m), c(0, 2), times = c(0, 2))
+  expect_equal(max(r$time), 1)
+  expect_equal(unname(tail(sim_signal(r, "x"), 1)), 10)
+  expect_equal(r$kind[r$time == 1], c("pre-event", "post-event"))
+})
+
+test_that("clocks far from zero keep every sample hit", {
+  m <- sim_model()
+  sim_add_block(m, "time", "t")
+  sim_add_block(m, "zero_order_hold", "h", period = 0.01)
+  sim_connect(m, "t", "h")
+  r <- sim_run(sim_compile(m), c(1e6, 1e6 + 1), times = 1e6 + 1, include_ticks = FALSE)
+  expect_equal(unname(sim_signal(r, "h")), 1e6 + 1, tolerance = 1e-12)
+})
+
+test_that("events can watch subsystem outputs", {
+  s <- sim_subsystem("pass")
+  sim_add_block(s, "inport", "i", index = 1)
+  sim_add_block(s, "outport", "o", index = 1)
+  sim_connect(s, "i", "o")
+  m <- sim_model()
+  sim_add_block(m, "time", "t")
+  sim_add_block(m, "subsystem", "ss", system = s)
+  sim_connect(m, "t", "ss")
+  sim_add_event(m, "end", sim_zero_crossing("ss", level = 1), terminal = TRUE)
+  expect_equal(max(sim_run(sim_compile(m), c(0, 2))$time), 1, tolerance = 1e-7)
+})
+
+test_that("discrete initial overrides also set held outputs", {
+  m <- sim_model()
+  sim_add_block(m, "constant", "z0", value = 0)
+  sim_add_block(m, "unit_delay", "z", period = 1, offset = 0.5)
+  sim_connect(m, "z0", "z")
+  r <- sim_run(sim_compile(m), c(0, 0.25), initial = list(z = 5))
+  expect_true(all(sim_signal(r, "z") == 5))
+})
+
+test_that("copies do not share nested subsystems", {
+  s <- sim_subsystem("g")
+  sim_add_block(s, "inport", "i", index = 1)
+  sim_add_block(s, "gain", "k", gain = 2)
+  sim_add_block(s, "outport", "o", index = 1)
+  sim_connect(s, "i", "k")
+  sim_connect(s, "k", "o")
+  m <- sim_model()
+  sim_add_block(m, "constant", "c")
+  sim_add_block(m, "subsystem", "g", system = s)
+  sim_connect(m, "c", "g")
+  m2 <- sim_copy(m)
+  sim_set_block_params(m2$blocks$g$params$system, "k", gain = 9)
+  out <- function(model) unname(sim_signal(sim_run(sim_compile(model), c(0, 1), times = 1), "g"))
+  expect_equal(out(m), 2)
+  expect_equal(out(m2), 9)
+})
+
+test_that("invalid outputs, sizes and names are reported, not hidden", {
+  m <- sim_model()
+  sim_add_block(m, "constant", "c", value = -1)
+  sim_add_block(m, "math", "q", fun = "sqrt")
+  sim_connect(m, "c", "q")
+  expect_error(suppressWarnings(sim_run(sim_compile(m), c(0, 1))), "NaN")
+
+  m <- sim_model()
+  sim_add_block(m, "constant", "one", value = 1)
+  sim_add_block(m, "sum", "s")
+  sim_add_block(m, "expression", "y", expr = "c(0, 0)")
+  sim_connect(m, "one", "s", input = 1)
+  sim_connect(m, "y", "s", input = 2)
+  sim_connect(m, "s", "y")
+  expect_error(sim_compile(m, algebraic_loops = "solve"), "size")
+
+  m <- sim_model()
+  sim_add_block(m, "constant", "v", value = c(1, 2))
+  sim_add_block(m, "demux", "d")
+  sim_connect(m, "v", "d")
+  sim_add_block(m, "constant", "d.out1", value = 99)
+  expect_error(sim_compile(m), "used twice")
+})
+
+test_that("static transfer functions are allowed", {
+  m <- sim_model()
+  sim_add_block(m, "constant", "c", value = 3)
+  sim_add_block(m, "transfer_function", "g", num = 2, den = 1)
+  sim_connect(m, "c", "g")
+  expect_equal(unname(sim_signal(sim_run(sim_compile(m), c(0, 1), times = 1), "g")), 6)
+})
+
+test_that("a failing run does not abort a sweep", {
+  m <- sim_model(params = list(k = 1))
+  sim_add_block(m, "constant", "c", value = sim_param("k"))
+  sim_add_block(m, "integrator", "x")
+  sim_connect(m, "c", "x")
+  s <- sim_sweep(m, data.frame(k = c(1, NA, 2)), tspan = c(0, 1),
+                 summary = function(r) c(end = tail(sim_signal(r, "x"), 1)))
+  expect_equal(s$status, c("success", "failed", "success"))
+  expect_equal(s$summary$end, c(1, NA, 2))
+})
+
+test_that("noise does not depend on the caller's generator settings", {
+  m <- sim_model()
+  sim_add_block(m, "white_noise", "w", seed = 1, period = 0.1)
+  plan <- sim_compile(m)
+  w1 <- sim_signal(sim_run(plan, c(0, 1)), "w")
+  old <- RNGkind()
+  on.exit(RNGkind(old[1], old[2], old[3]))
+  RNGkind(normal.kind = "Box-Muller")
+  w2 <- sim_signal(sim_run(plan, c(0, 1)), "w")
+  expect_identical(w1, w2)
+  expect_equal(RNGkind()[2], "Box-Muller")
+})

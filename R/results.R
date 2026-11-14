@@ -232,6 +232,13 @@ plot.sim_result <- function(x, signals = NULL, events = TRUE, ...) {
 
 default_plot_signals <- function(x) {
   if (length(x$scopes)) return(x$scopes)
-  if (length(x$dynamic)) return(utils::head(x$dynamic, 6L))
+  if (length(x$dynamic)) {
+    # a block with several output ports is plotted through its port signals
+    sigs <- unlist(lapply(x$dynamic, function(b) {
+      nms <- names(x$signal_of)
+      if (!is.null(x$signal_of[[b]])) b else nms[startsWith(nms, paste0(b, "."))]
+    }))
+    return(utils::head(sigs, 6L))
+  }
   utils::head(names(x$signal_of), 6L)
 }

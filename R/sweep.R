@@ -87,14 +87,20 @@ run_sets <- function(plan, sets, tspan, times, summary, keep, cores, ...) {
   if (!is.null(summary) && !is.function(summary)) sim_abort("`summary` must be a function.")
   if (!is_count(cores)) sim_abort("`cores` must be a positive integer.")
   one <- function(i) {
-    p <- sim_set_params(plan, sets[[i]])
-    r <- tryCatch(sim_run(p, tspan, times = times, on_failure = "warn", ...),
+    fail <- function(e) list(result = NULL, status = "failed", summary = NULL,
+                             message = conditionMessage(e))
+    r <- tryCatch(sim_run(sim_set_params(plan, sets[[i]]), tspan, times = times,
+                          on_failure = "warn", ...),
                   error = function(e) e)
-    if (inherits(r, "error")) {
-      return(list(result = NULL, status = "failed", summary = NULL,
-                  message = conditionMessage(r)))
+    if (inherits(r, "error")) return(fail(r))
+    s <- NULL
+    if (!is.null(summary) && r$success) {
+      s <- tryCatch(summary(r), error = function(e) e)
+      if (inherits(s, "error")) {
+        return(list(result = if (keep) r, status = "failed", summary = NULL,
+                    message = paste("summary failed:", conditionMessage(s))))
+      }
     }
-    s <- if (!is.null(summary) && r$success) summary(r) else NULL
     list(result = if (keep) r, status = r$status, summary = s, message = r$message)
   }
   idx <- seq_along(sets)

@@ -38,6 +38,13 @@ check_ss <- function(p) {
 }
 
 initial_state <- function(initial, n) {
+  if (n == 0L) {
+    # a static gain has no state; only the default zero initial value fits
+    if (length(initial) && !(length(initial) == 1L && identical(as.numeric(initial), 0))) {
+      sim_abort("`initial` must be 0 or empty: the system has no states.")
+    }
+    return(numeric())
+  }
   x0 <- check_numeric(initial, "`initial`")
   if (length(x0) == 1L && n > 1L && x0 == 0) return(rep(0, n))
   if (length(x0) != n) sim_abort("`initial` must have length ", n, ".")
@@ -68,9 +75,9 @@ ss_discrete <- function(s, x0, period, offset) {
        nd = nrow(s$A), d0 = x0, sample = c(period, offset),
        output = function(t, x, d, u) as.numeric(s$C %*% d + s$D %*% u[[1]]),
        update = function(t, x, d, u) as.numeric(s$A %*% d + s$B %*% u[[1]]),
-       held0 = function(size) {
+       held0 = function(size, d0 = x0) {
          # before the first hit the block holds C x0 (input taken as zero)
-         as.numeric(s$C %*% x0)
+         as.numeric(s$C %*% d0)
        })
 }
 
@@ -142,7 +149,7 @@ register_dynamic_blocks <- function() {
              nd = length(x0), d0 = x0, sample = c(p$period, p$offset),
              output = function(t, x, d, u) d,
              update = function(t, x, d, u) u[[1]],
-             held0 = function(size) x0)
+             held0 = function(size, d0 = x0) d0)
       })
 
   reg("zero_order_hold", category = "discrete",
@@ -188,7 +195,7 @@ register_dynamic_blocks <- function() {
              sample = c(p$period, p$offset),
              output = function(t, x, d, u) out$y(d, u[[1]]),
              update = function(t, x, d, u) out$up(d, u[[1]]),
-             held0 = function(size) x0)
+             held0 = function(size, d0 = x0) d0)
       })
 
   reg("discrete_state_space", category = "discrete",

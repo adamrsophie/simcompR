@@ -55,11 +55,13 @@ register_logic_blocks <- function() {
         # smooth inside each integration segment.
         list(inputs = c(NA, 1L, NA), outputs = NA, feedthrough = TRUE,
              input_names = c("in1", "control", "in3"),
-             nd = 1L, d0 = 1,
+             # d0 = -1: mode not yet known, set from the criterion at the start
+             nd = 1L, d0 = -1,
              size_out = function(n) broadcast_size(n[c(1, 3)]),
              output = function(t, x, d, u) {
                n <- max(length(u[[1]]), length(u[[3]]))
-               if (d[[1]] == 1) expand(u[[1]], n) else expand(u[[3]], n)
+               pass <- if (d[[1]] < 0) test(u[[2]]) else d[[1]] == 1
+               if (pass) expand(u[[1]], n) else expand(u[[3]], n)
              },
              zc = function(t, x, d, u) u[[2]] - thr,
              zc_direction = "either",
@@ -69,7 +71,7 @@ register_logic_blocks <- function() {
              },
              modes = function(t, x, d, u) {
                g <- u[[2]] - thr
-               if (abs(g) <= tol && crit != "!=") d else as.numeric(test(u[[2]]))
+               if (d[[1]] >= 0 && abs(g) <= tol && crit != "!=") d else as.numeric(test(u[[2]]))
              })
       })
 

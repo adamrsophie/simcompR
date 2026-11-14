@@ -103,6 +103,7 @@ flatten_model <- function(model, prefix = "", scopes = list(), depth = 0L) {
   scopes <- c(scopes, list(model$params))
   blocks <- list()
   aliases <- list()
+  out_map <- list()
   conns <- model$connections
   conns$from <- paste0(prefix, conns$from, recycle0 = TRUE)
   conns$to <- paste0(prefix, conns$to, recycle0 = TRUE)
@@ -143,6 +144,7 @@ flatten_model <- function(model, prefix = "", scopes = list(), depth = 0L) {
     alias_names <- if (length(outports) == 1L) full else
       paste0(full, ".", subsystem_ports(sys, "outport"))
     aliases[alias_names] <- as.list(outports)
+    out_map[[full]] <- outports
     into <- conns$to == full
     if (any(conns$to_port[into] > length(inports))) {
       sim_abort("Block '", full, "' has ", length(inports), " input(s).")
@@ -156,6 +158,19 @@ flatten_model <- function(model, prefix = "", scopes = list(), depth = 0L) {
     conns$from[outof] <- outports[conns$from_port[outof]]
     conns$from_port[outof] <- 1L
     conns <- rbind(conns, inner$connections)
+  }
+  # events of this level that watch a subsystem instance watch its outport
+  for (k in seq_along(events)) {
+    tr <- events[[k]]$trigger
+    if (tr$kind != "zero_crossing" || is.null(out_map[[tr$signal]])) next
+    ports <- out_map[[tr$signal]]
+    if (tr$port > length(ports)) {
+      sim_abort("Event '", events[[k]]$name, "': subsystem '", tr$signal, "' has ",
+                length(ports), " output(s).")
+    }
+    tr$signal <- ports[tr$port]
+    tr$port <- 1L
+    events[[k]]$trigger <- tr
   }
   list(blocks = blocks, connections = conns, events = events, aliases = aliases)
 }

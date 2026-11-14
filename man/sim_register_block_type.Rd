@@ -68,8 +68,10 @@ vectors.
 \item \code{deriv(t, x, d, u)}: continuous state derivative.
 \item \code{update(t, x, d, u)}: next discrete state, called at sample hits after
 all outputs at that instant have been computed.
-\item \code{held0(d)}: initial held output of a discrete block before its first
-sample hit.
+\item \code{held0(size, d0)}: initial held output of a discrete block before its
+first sample hit. \code{size} holds the output port sizes and \code{d0}, when the
+function accepts it, the initial discrete state (including overrides
+given to \code{\link[=sim_run]{sim_run()}}).
 \item \code{zc(t, x, d, u)} and \code{on_zc(i, direction, t, x, d, u)}: zero-crossing
 functions and their handler, which returns \code{list(d = , x = , terminal = )}.
 \code{zc_direction} gives one of \code{"rising"}, \code{"falling"}, \code{"either"} per

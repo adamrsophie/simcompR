@@ -15,6 +15,9 @@
 #' 4. when no transition fires, runs the `during` action of the current
 #'    state.
 #'
+#' The entry action of the initial state runs at the first sample hit,
+#' before transitions are considered, with the inputs and time of that hit.
+#'
 #' At most one transition fires per sample hit, so evaluation never loops.
 #' Outputs are computed after the transition, which means the outputs at a
 #' hit depend on the inputs at the same hit (direct feedthrough).
@@ -130,7 +133,7 @@ compile_action <- function(a, what) {
   if (is.function(a)) return(a)
   e <- parse_safe(a, what)
   function(data, u, t) {
-    env <- list2env(c(as.list(data), list(u = u, t = t)), parent = baseenv())
+    env <- safe_frame(c(as.list(data), list(u = u, t = t)))
     eval(e, env)
     out <- vapply(names(data), function(n) as.numeric(get(n, envir = env))[1], 0)
     names(out) <- names(data)
@@ -222,8 +225,16 @@ register_state_machine_block <- function() {
         o
       }
       s0 <- match(initial, states)
-      # entry action of the initial state runs at the start
-      if (!is.null(acts$entry[[s0]])) data0 <- acts$entry[[s0]](data0, numeric(nin), 0)
+      # The entry action of the initial state runs at the first sample hit,
+      # with the actual inputs and time (never while the model is built).
+      start <- function(st, u, t) {
+        if (is.finite(st$entered)) return(st)
+        st$entered <- t
+        if (!is.null(acts$entry[[st$s]])) {
+          st$data <- acts$entry[[st$s]](st$data, unlist(u, use.names = FALSE), t)
+        }
+        st
+      }
       osz <- c(state = 1L)
       if (!is.null(outs)) osz <- c(osz, y = length(outs[[1]]))
       if (nvar) osz <- c(osz, data = nvar)
@@ -231,14 +242,12 @@ register_state_machine_block <- function() {
            nd = 2L + nvar, d0 = c(s0, -Inf, data0),
            sample = c(p$period, p$offset),
            output = function(t, x, d, u) {
-             st <- unpack(d)
-             if (!is.finite(st$entered)) st$entered <- t
+             st <- start(unpack(d), u, t)
              r <- run(st$s, st$entered, st$data, u, t)
              make_out(r$s, r$data)
            },
            update = function(t, x, d, u) {
-             st <- unpack(d)
-             if (!is.finite(st$entered)) st$entered <- t
+             st <- start(unpack(d), u, t)
              r <- run(st$s, st$entered, st$data, u, t)
              c(r$s, r$entered, r$data)
            },

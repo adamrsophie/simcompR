@@ -59,16 +59,25 @@ check_sample_time <- function(period, offset, what) {
 }
 
 # Absolute time tolerance used to merge clock hits and boundaries.
+# About 4500 units in the last place: far above the rounding error of
+# offset + k * period, far below any meaningful time step.
 time_tol <- function(tspan) {
-  1e-10 * max(1, abs(tspan))
+  1e-12 * max(1, abs(tspan))
 }
 
-# Merge sorted times that agree within tol. Keeps the first of each cluster.
+# Merge sorted times that agree within tol. Each kept time is compared with
+# the last kept one, so a long run of close times cannot chain together.
 merge_times <- function(times, tol) {
   times <- sort(unique(times))
   if (length(times) < 2L) return(times)
-  keep <- c(TRUE, diff(times) > tol)
-  # cluster representatives: first element of each run
+  keep <- logical(length(times))
+  last <- -Inf
+  for (i in seq_along(times)) {
+    if (times[i] - last > tol) {
+      keep[i] <- TRUE
+      last <- times[i]
+    }
+  }
   times[keep]
 }
 
@@ -111,6 +120,11 @@ safe_functions <- c(
 
 #' Parse a portable expression
 #'
+#' Besides checking called functions against the whitelist, the expression
+#' must call functions only by name (no computed call heads such as
+#' `(f)(x)`) and may assign only to plain variables or their elements,
+#' never to a name of a permitted function.
+#'
 #' @param text A single string.
 #' @param what Description used in error messages.
 #' @return A parsed expression.
@@ -122,25 +136,62 @@ parse_safe <- function(text, what) {
   expr <- tryCatch(str2lang(text), error = function(e) {
     sim_abort(what, " could not be parsed: ", conditionMessage(e))
   })
-  bad <- setdiff(called_functions(expr), safe_functions)
-  if (length(bad)) {
-    sim_abort(what, " uses functions that are not allowed in portable ",
-              "expressions: ", paste(bad, collapse = ", "), ".")
-  }
+  check_safe_expr(expr, what)
   expr
 }
 
-called_functions <- function(expr) {
-  if (is.call(expr)) {
-    fn <- expr[[1L]]
-    head <- if (is.symbol(fn)) as.character(fn) else called_functions(fn)
-    c(head, unlist(lapply(as.list(expr)[-1L], called_functions)))
-  } else {
-    character()
+check_safe_expr <- function(expr, what) {
+  if (!is.call(expr)) return(invisible())
+  fn <- expr[[1L]]
+  if (!is.symbol(fn)) {
+    sim_abort(what, " calls a computed function; only named functions are allowed ",
+              "in portable expressions.")
   }
+  name <- as.character(fn)
+  if (!name %in% safe_functions) {
+    sim_abort(what, " uses functions that are not allowed in portable ",
+              "expressions: ", name, ".")
+  }
+  if (name %in% c("<-", "=")) {
+    target <- expr[[2L]]
+    while (is.call(target) && is.symbol(target[[1L]]) &&
+           as.character(target[[1L]]) %in% c("[", "[[")) {
+      lapply(as.list(target)[-c(1L, 2L)], check_safe_expr, what = what)
+      target <- target[[2L]]
+    }
+    if (!is.symbol(target)) {
+      sim_abort(what, " assigns to something other than a variable.")
+    }
+    if (as.character(target) %in% c(safe_functions, "u", "t", "x", "s", "elapsed")) {
+      sim_abort(what, " must not assign to '", as.character(target), "'.")
+    }
+    check_safe_expr(expr[[3L]], what)
+    return(invisible())
+  }
+  lapply(as.list(expr)[-1L], check_safe_expr, what = what)
+  invisible()
+}
+
+# Environment holding only the permitted functions and constants. Its parent
+# is the empty environment, so nothing else in R is reachable by name.
+safe_env <- local({
+  env <- NULL
+  function() {
+    if (is.null(env)) {
+      env <<- new.env(parent = emptyenv())
+      for (f in setdiff(safe_functions, c("TRUE", "FALSE"))) {
+        assign(f, get(f, envir = baseenv()), envir = env)
+      }
+      lockEnvironment(env, bindings = TRUE)
+    }
+    env
+  }
+})
+
+safe_frame <- function(vars) {
+  list2env(vars, parent = safe_env())
 }
 
 eval_safe <- function(expr, vars) {
-  env <- list2env(vars, parent = baseenv())
-  eval(expr, env)
+  eval(expr, safe_frame(vars))
 }

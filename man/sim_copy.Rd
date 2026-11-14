@@ -16,7 +16,8 @@ A new \code{sim_model}.
 }
 \description{
 Models are modified in place, so assigning a model to a new variable
-does not copy it. \code{sim_copy()} returns an independent copy.
+does not copy it. \code{sim_copy()} returns an independent copy, including
+independent copies of nested subsystem models.
 }
 \examples{
 m <- sim_model("a")

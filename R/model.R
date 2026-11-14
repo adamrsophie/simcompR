@@ -325,7 +325,8 @@ print.sim_model <- function(x, ...) {
 #' Copy a model
 #'
 #' Models are modified in place, so assigning a model to a new variable
-#' does not copy it. `sim_copy()` returns an independent copy.
+#' does not copy it. `sim_copy()` returns an independent copy, including
+#' independent copies of nested subsystem models.
 #'
 #' @param model A [sim_model()].
 #' @param name Optional new name.
@@ -339,7 +340,26 @@ print.sim_model <- function(x, ...) {
 #' @export
 sim_copy <- function(model, name = model$name) {
   check_model(model)
-  out <- sim_model(name, model$params)
-  for (f in c("blocks", "connections", "events")) out[[f]] <- model[[f]]
+  out <- copy_model_env(model)
+  out$name <- name
   out
+}
+
+# Copy a model environment, including nested subsystem models, which are
+# environments too and would otherwise stay shared.
+copy_model_env <- function(model) {
+  out <- new.env(parent = emptyenv())
+  for (f in ls(model, all.names = TRUE)) assign(f, copy_nested(get(f, envir = model)), envir = out)
+  class(out) <- class(model)
+  out
+}
+
+copy_nested <- function(v) {
+  if (inherits(v, "sim_model")) return(copy_model_env(v))
+  if (is.list(v) && !is.data.frame(v)) {
+    a <- attributes(v)
+    v <- lapply(v, copy_nested)
+    attributes(v) <- a
+  }
+  v
 }

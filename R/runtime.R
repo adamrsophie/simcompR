@@ -6,14 +6,22 @@ block_inputs <- function(b, sig) {
   lapply(b$in_idx, function(i) sig[i])
 }
 
-write_outputs <- function(b, y, sig) {
+write_outputs <- function(b, y, sig, strict = FALSE) {
   if (!is.list(y)) y <- list(y)
   if (length(y) != length(b$out_idx)) {
     sim_abort("Block '", b$name, "' returned ", length(y), " output(s), expected ",
               length(b$out_idx), ".")
   }
   for (j in seq_along(y)) {
-    v <- as.numeric(y[[j]])
+    v <- y[[j]]
+    if (!is.numeric(v) || (length(dim(v)) > 1L && sum(dim(v) > 1L) > 1L)) {
+      sim_abort("Block '", b$name, "' returned a ", class(v)[1], " on port ", j,
+                "; outputs must be numeric vectors.")
+    }
+    v <- as.numeric(v)
+    if (strict && anyNA(v)) {
+      sim_abort("Block '", b$name, "' returned NA or NaN on port ", j, ".")
+    }
     if (length(v) != length(b$out_idx[[j]])) {
       sim_abort("Block '", b$name, "' returned an output of length ", length(v),
                 " on port ", j, "; expected ", length(b$out_idx[[j]]), ".")
@@ -24,7 +32,8 @@ write_outputs <- function(b, y, sig) {
 }
 
 eval_block <- function(b, t, x, d, sig) {
-  write_outputs(b, b$def$output(t, x[b$x_idx], d[b$d_idx], block_inputs(b, sig)), sig)
+  write_outputs(b, b$def$output(t, x[b$x_idx], d[b$d_idx], block_inputs(b, sig)), sig,
+                strict = TRUE)
 }
 
 # Evaluate all block outputs at time t.
@@ -35,7 +44,26 @@ eval_block <- function(b, t, x, d, sig) {
 # their mode from their current inputs before computing outputs.
 #
 # Returns list(sig, d, loop) where loop records algebraic loop residuals.
-evaluate <- function(plan, t, x, d, held, ticking = NULL, refresh = FALSE) {
+evaluate <- function(plan, t, x, d, held, ticking = NULL, refresh = FALSE,
+                     t_left = Inf) {
+  if (refresh && any(vapply(plan$blocks, `[[`, TRUE, "has_modes"))) {
+    # Modes are recomputed from fully evaluated signals, never from a
+    # partially filled signal vector, and repeated until they settle, so the
+    # result does not depend on the execution order of mode blocks.
+    for (iter in seq_len(50L)) {
+      ev <- evaluate(plan, t, x, d, held, ticking, refresh = FALSE)
+      dn <- d
+      for (b in plan$blocks) {
+        if (b$has_modes) {
+          dn[b$d_idx] <- b$def$modes(t, x[b$x_idx], d[b$d_idx], block_inputs(b, ev$sig))
+        }
+      }
+      if (identical(dn, d)) return(ev)
+      d <- dn
+    }
+    sim_abort("Block modes did not settle at t = ", format(t),
+              " (switching blocks keep changing each other).")
+  }
   sig <- held
   blocks <- plan$blocks
   loop_info <- NULL
@@ -43,10 +71,9 @@ evaluate <- function(plan, t, x, d, held, ticking = NULL, refresh = FALSE) {
     if (!item$loop) {
       b <- blocks[[item$blocks]]
       if (b$discrete && (is.null(ticking) || !ticking[item$blocks])) next
-      if (refresh && b$has_modes) {
-        d[b$d_idx] <- b$def$modes(t, x[b$x_idx], d[b$d_idx], block_inputs(b, sig))
-      }
-      if (length(b$out_idx)) sig <- eval_block(b, t, x, d, sig)
+      # sources with breakpoints show their left limit at a segment's end
+      tb <- if (t > t_left && is.function(b$def$breakpoints)) t_left else t
+      if (length(b$out_idx)) sig <- eval_block(b, tb, x, d, sig)
       next
     }
     res <- solve_loop(plan, item, t, x, d, sig, ticking)
@@ -64,6 +91,9 @@ solve_loop <- function(plan, item, t, x, d, sig, ticking) {
     b <- plan$blocks[[i]]
     !b$discrete || (!is.null(ticking) && ticking[i])
   }, TRUE)
+  # outputs of sampled blocks between their hits are held, not unknowns
+  zi <- unlist(lapply(blocks[active], function(b) unlist(b$out_idx)))
+  if (!length(zi)) return(list(sig = sig, residual = 0, iterations = 0L))
   F <- function(z) {
     s <- sig
     s[zi] <- z

@@ -71,7 +71,7 @@ Runs a \code{\link[=sim_compile]{sim_compile()}} plan over \code{tspan} and retu
 discrete block, every scheduled event time and every breakpoint of a
 source (for example the time of a step). Sample hits are computed as
 \code{offset + k * period} with integer \code{k}, never by accumulating \code{period},
-so they do not drift. Hits closer than \verb{1e-10 * max(1, |t|)} are treated
+so they do not drift. Hits closer than \verb{1e-12 * max(1, |t|)} are treated
 as simultaneous.
 
 \strong{At a segment boundary} the simulator, in this order:
