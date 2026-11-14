@@ -201,6 +201,7 @@ register_math_blocks <- function() {
         xs <- check_numeric(p$x, "`x`")
         ys <- check_numeric(p$y, "`y`")
         check_same_length(xs, ys, what = "`x` and `y`")
+        if (length(xs) < 2L) sim_abort("`x` and `y` need at least two points.")
         if (is.unsorted(xs, strictly = TRUE)) sim_abort("`x` must be strictly increasing.")
         ext <- match.arg(p$extrapolate, c("hold", "linear"))
         n <- length(xs)

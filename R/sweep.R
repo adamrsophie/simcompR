@@ -86,6 +86,12 @@ parameter_sets <- function(parameters) {
 run_sets <- function(plan, sets, tspan, times, summary, keep, cores, ...) {
   if (!is.null(summary) && !is.function(summary)) sim_abort("`summary` must be a function.")
   if (!is_count(cores)) sim_abort("`cores` must be a positive integer.")
+  # a misspelled parameter is a mistake in the design, not a failed run
+  unknown <- setdiff(unlist(lapply(sets, names)), names(plan$params))
+  if (length(unknown)) {
+    sim_abort("Unknown model parameter(s): ", paste(unique(unknown), collapse = ", "),
+              ". Model parameters: ", paste(names(plan$params), collapse = ", "), ".")
+  }
   one <- function(i) {
     fail <- function(e) list(result = NULL, status = "failed", summary = NULL,
                              message = conditionMessage(e))

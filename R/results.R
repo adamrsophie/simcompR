@@ -18,12 +18,12 @@ record_signals <- function(plan, rows) {
 }
 
 build_result <- function(plan, rows, rec, ev_log, status, message, stats, solver,
-                         x0, d0, initial) {
+                         x0, d0, initial, warnings = character()) {
   n <- length(rows)
   time <- vapply(rows, `[[`, 0, "t")
-  X <- matrix(unlist(lapply(rows, `[[`, "x")), n, plan$nx, byrow = TRUE,
+  X <- matrix(as.numeric(unlist(lapply(rows, `[[`, "x"))), n, plan$nx, byrow = TRUE,
               dimnames = list(NULL, plan$state_names))
-  D <- matrix(unlist(lapply(rows, `[[`, "d")), n, plan$nd, byrow = TRUE,
+  D <- matrix(as.numeric(unlist(lapply(rows, `[[`, "d"))), n, plan$nd, byrow = TRUE,
               dimnames = list(NULL, plan$dstate_names))
   S <- rec$S
   loop_res <- rec$loop
@@ -48,7 +48,7 @@ build_result <- function(plan, rows, rec, ev_log, status, message, stats, solver
     message = message,
     diagnostics = list(status = status, message = message, solver = solver,
                        stats = stats, loop_residuals = loop_res,
-                       n_events = nrow(events)),
+                       n_events = nrow(events), warnings = warnings),
     metadata = list(model = plan$name, params = plan$params,
                     initial_continuous = stats::setNames(x0, plan$state_names),
                     initial_discrete = stats::setNames(d0, plan$dstate_names),

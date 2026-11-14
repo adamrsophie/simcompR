@@ -61,7 +61,11 @@ test_that("scheduled events reset states at exact times", {
   x1 <- exp(-1) + 1
   x2 <- x1 * exp(-1) + 1
   ref <- c(1, exp(-0.5), x1, x1 * exp(-0.5), x2, x2 * exp(-0.5), x2 * exp(-1))
-  expect_lt(max(abs(sim_signal(r, "x") - ref)), 1e-8)
+  # at an event time the pre-event row comes first, then the post-event row
+  keep <- !duplicated(r$time, fromLast = TRUE)
+  expect_equal(r$time[keep], c(0, 0.5, 1, 1.5, 2, 2.5, 3))
+  expect_lt(max(abs(sim_signal(r, "x")[keep] - ref)), 1e-8)
+  expect_equal(r$kind[r$time == 1], c("pre-event", "post-event"))
   expect_equal(sim_events(r)$type, c("scheduled", "scheduled"))
 })
 

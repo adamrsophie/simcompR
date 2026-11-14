@@ -65,20 +65,25 @@ time_tol <- function(tspan) {
   1e-12 * max(1, abs(tspan))
 }
 
-# Merge sorted times that agree within tol. Each kept time is compared with
-# the last kept one, so a long run of close times cannot chain together.
+# Merge sorted times that agree within tol. A cluster starts at its first
+# time and never extends beyond tol from it, so close times cannot chain
+# together. The cluster is represented by its largest time: a sample hit
+# computed as 0.8999999999999999 and a step at 0.9 meet at 0.9, where the
+# step has already switched.
 merge_times <- function(times, tol) {
   times <- sort(unique(times))
   if (length(times) < 2L) return(times)
-  keep <- logical(length(times))
-  last <- -Inf
-  for (i in seq_along(times)) {
-    if (times[i] - last > tol) {
-      keep[i] <- TRUE
-      last <- times[i]
+  out <- numeric()
+  start <- -Inf
+  for (v in times) {
+    if (v - start > tol) {
+      out <- c(out, v)
+      start <- v
+    } else {
+      out[length(out)] <- v
     }
   }
-  times[keep]
+  out
 }
 
 # Index of the element of sorted `ref` within tol of each value, else NA.

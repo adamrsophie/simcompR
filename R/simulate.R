@@ -49,7 +49,10 @@ root_methods <- c("lsoda", "lsode", "lsodes", "lsodar")
 #'   zero crossings need one of `"lsoda"`, `"lsode"`, `"lsodes"` or
 #'   `"lsodar"`.
 #' @param rtol,atol Relative and absolute tolerances.
-#' @param hmax Optional maximum step size.
+#' @param hmax Optional maximum step size. When the model has zero-crossing
+#'   functions and `hmax` is not given, it is `(tf - t0) / 100`, because the
+#'   root finder cannot see two crossings inside one step; give a smaller
+#'   value for signals that cross faster.
 #' @param maxsteps Maximum number of internal steps per segment.
 #' @param initial Optional named list overriding initial states, keyed by
 #'   block name.
@@ -98,9 +101,9 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
   n_event_zc <- sum(vapply(plan$events, function(e) e$trigger$kind == "zero_crossing", TRUE))
   nzc <- plan$zc$n + n_event_zc
   if (!is.character(method) || length(method) != 1L) sim_abort("`method` must be a string.")
-  if (method == "radau") {
-    sim_abort("method = \"radau\" is not supported: it cannot be told to stop at ",
-              "segment boundaries, so it would evaluate inputs past discontinuities.")
+  if (method %in% c("radau", "iteration")) {
+    sim_abort("method = \"", method, "\" is not supported: it cannot be told to stop at ",
+              "segment boundaries.")
   }
   if (nzc && !method %in% root_methods) {
     sim_abort("This model has zero-crossing functions; use method = one of ",
@@ -115,6 +118,8 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
     x <- st$x; d <- st$d
     for (nm in names(initial)) held <- set_held0(plan$blocks[[nm]], d[plan$blocks[[nm]]$d_idx], held)
   }
+  x_init <- x
+  d_init <- d
 
   # Timeline: boundaries, sample hits and scheduled events ---------------
   rates <- plan$rates
@@ -151,6 +156,9 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
   }
 
   ode_args <- list(...)
+  # With crossing functions, cap the step so that two crossings inside one
+  # step (which the root finder cannot see) need a fast signal.
+  if (is.null(hmax) && nzc) hmax <- (tf - t0) / 100
   if (!is.null(hmax)) ode_args$hmax <- hmax
   dummy <- plan$nx == 0L && nzc > 0L
 
@@ -280,6 +288,7 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
     seg <- integrate_segment(plan, t, tn, inner, x, d, held, dummy, method,
                              rtol, atol, maxsteps, zc_tol, nzc, ode_args)
     stats_acc <- stats_acc + seg$stats
+    warnings <- unique(c(warnings, seg$warnings))
     for (k in seq_along(seg$times)) add_row(seg$times[k], seg$x[k, ], d, held, "sample")
     if (!is.null(seg$error)) {
       failed(seg$error)
@@ -344,6 +353,7 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
     }
   }
   if (status == "failed") {
+    message <- sub("[.]+$", "", message)
     if (on_failure == "error") sim_abort("Simulation failed ", message, ".")
     sim_warn("Simulation failed ", message, ". Returning the partial result.")
   }
@@ -352,7 +362,7 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
   build_result(plan, rows, rec, ev_log, status, message, stats_acc,
                list(tspan = tspan, method = method, rtol = rtol, atol = atol,
                     hmax = hmax, maxsteps = maxsteps, max_events = max_events),
-               x0 = plan$x0, d0 = plan$d0, initial = initial)
+               x0 = x_init, d0 = d_init, initial = initial, warnings = warnings)
 }
 
 apply_initial <- function(plan, initial, x, d) {
@@ -404,17 +414,24 @@ integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
                           evaluate(plan, tt, xx, d, held, t_left = t_left)$sig) - off
       # A function that starts at zero and stays exactly there (a constant
       # signal sitting on its threshold) would make the root finder stop with
-      # "root too near the initial point"; report it as positive instead.
-      v[at0 & v == 0] <- 1
+      # "root too near the initial point". Past the start, report an exact
+      # zero as positive; at the start itself keep the zero, so the root
+      # finder takes its reference sign from the first step.
+      if (tt > t) v[at0 & v == 0] <- 1
       v
     }
   }
   empty <- list(times = numeric(), x = matrix(numeric(), 0L, length(x)),
                 stats = c(segments = 1, steps = 0, rhs_evaluations = 0, jacobians = 0, roots = 0))
-  out <- tryCatch(suppressWarnings(do.call(deSolve::ode, args)),
-                  error = function(e) e)
+  warns <- character()
+  out <- tryCatch(withCallingHandlers(do.call(deSolve::ode, args), warning = function(w) {
+    warns <<- c(warns, conditionMessage(w))
+    invokeRestart("muffleWarning")
+  }), error = function(e) e)
   if (inherits(out, "error")) {
-    empty$error <- paste0("in [", format(t), ", ", format(tn), "]: ", conditionMessage(out))
+    empty$error <- paste0("in [", format(t), ", ", format(tn), "]: ",
+                          sub("[.]+$", "", conditionMessage(out)))
+    empty$warnings <- warns
     return(empty)
   }
   ist <- attr(out, "istate")
@@ -428,7 +445,15 @@ integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
   is_root <- length(troot) > 0L
   last <- nrow(out)
   keep <- which(tt %in% inner & (if (is_root) tt < troot[1] else TRUE))
-  res <- list(times = tt[keep], x = ymat[keep, , drop = FALSE], stats = stats)
+  res <- list(times = tt[keep], x = ymat[keep, , drop = FALSE], stats = stats,
+              warnings = warns)
+  if (!all(is.finite(ymat))) {
+    bad <- which(!apply(is.finite(ymat), 1L, all))[1]
+    res$times <- res$times[res$times < tt[bad]]
+    res$x <- res$x[seq_along(res$times), , drop = FALSE]
+    res$error <- paste0("the states became NaN or infinite at t = ", format(tt[bad]))
+    return(res)
+  }
   flag <- ist[1] %||% 2
   if (!is_root && (flag < 0 || abs(tt[last] - tn) > 1e-9 * max(1, abs(tn)))) {
     res$error <- paste0("the integrator stopped at t = ", format(tt[last]),

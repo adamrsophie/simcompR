@@ -1,12 +1,12 @@
 Package: simcompR
-Title: Block-Diagram Modeling and Dynamic System Simulation in R
+Title: Block-Diagram Modeling and Dynamic System Simulation
 Version: 0.1.0
 Authors@R:
     person("Adam R", "Sophie", email = "adamrsophie@gmail.com",
            role = c("aut", "cre", "cph"))
 Description: A code-first framework for building and simulating block
     diagrams of dynamic systems. Models are directed graphs of blocks with
-    typed, sized input and output ports. Compilation validates connections
+    sized input and output ports. Compilation validates connections
     and signal dimensions, analyzes direct-feedthrough dependencies,
     detects algebraic loops through strongly connected components (and can
     solve them with Newton iterations), and builds a deterministic,
@@ -16,7 +16,7 @@ Description: A code-first framework for building and simulating block
     output-before-update semantics, restarts integration at scheduled
     discontinuities, and locates zero crossings for state resets, mode
     changes and terminal events. Hierarchical parameterized subsystems,
-    Stateflow-like state machines, portable JSON model files, parameter
+    'Stateflow'-like state machines, portable JSON model files, parameter
     sweeps and reproducible Monte Carlo experiments are included. The
     design is inspired by 'Simulink' and 'bdsim'
     <https://github.com/petercorke/bdsim>; no 'Python' or 'MATLAB' is

@@ -208,3 +208,50 @@ test_that("noise does not depend on the caller's generator settings", {
   expect_identical(w1, w2)
   expect_equal(RNGkind()[2], "Box-Muller")
 })
+
+test_that("non-finite states end the run with a failure", {
+  m <- sim_model()
+  sim_add_block(m, "integrator", "x", initial = 1)
+  sim_add_block(m, "expression", "f", expr = "log(u[1] - 2)")
+  sim_connect(m, "x", "f")
+  sim_connect(m, "f", "x")
+  expect_error(suppressWarnings(sim_run(sim_compile(m), c(0, 1))), "NaN")
+})
+
+test_that("a failure at the first row still returns a partial result", {
+  m <- sim_model()
+  sim_add_block(m, "constant", "c")
+  sim_add_block(m, "fcn", "f", fun = function(u, t) if (t > 0.5) stop("boom") else u)
+  sim_connect(m, "c", "f")
+  r <- suppressWarnings(sim_run(sim_compile(m), c(1, 2), on_failure = "warn"))
+  expect_false(r$success)
+  expect_match(r$message, "boom")
+})
+
+test_that("crossings are found whatever the output grid", {
+  m <- sim_model()
+  sim_add_block(m, "sine", "s", frequency = 2 * pi)
+  sim_add_block(m, "constant", "zero", value = 0)
+  sim_add_block(m, "discrete_integrator", "n", period = 100)
+  sim_connect(m, "zero", "n")
+  sim_add_event(m, "up", sim_zero_crossing("s", "rising"), reset = list(n = "x + 1"))
+  r <- sim_run(sim_compile(m), c(0.1, 10.1), times = c(0.1, 10.1))
+  expect_equal(nrow(sim_events(r)), 10)
+})
+
+test_that("a breakpoint on a sample hit is seen at that hit", {
+  m <- sim_model()
+  sim_add_block(m, "step", "u", time = 0.9)
+  sim_add_block(m, "zero_order_hold", "h", period = 0.3)
+  sim_connect(m, "u", "h")
+  r <- sim_run(sim_compile(m), c(0, 1.2), times = c(0.9, 1.2), include_ticks = FALSE)
+  expect_equal(unname(sim_signal(r, "h")), c(1, 1))
+})
+
+test_that("a lookup table needs two points", {
+  m <- sim_model()
+  sim_add_block(m, "constant", "c")
+  sim_add_block(m, "lookup", "l", x = 1, y = 1)
+  sim_connect(m, "c", "l")
+  expect_error(sim_compile(m), "two points")
+})

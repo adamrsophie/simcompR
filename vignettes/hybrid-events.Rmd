@@ -17,7 +17,9 @@ library(simcompR)
 
 Hybrid systems combine continuous evolution with instantaneous changes:
 resets, mode switches and stops. `simcompR` handles them by integrating
-smooth segments and stopping the solver exactly at every discontinuity.
+segments and stopping the solver at the discontinuities it knows about:
+source breakpoints, sample hits, scheduled events and located zero
+crossings.
 
 ## Kinds of discontinuity
 
@@ -29,8 +31,11 @@ smooth segments and stopping the solver exactly at every discontinuity.
 | `sim_add_event(trigger = sim_zero_crossing(...))` | root finding | impacts, thresholds |
 | `switch`, `relay`, `stop` blocks | root finding | mode changes, termination |
 
-Inside a segment the right-hand side is smooth: discrete states, held
-outputs and modes are frozen. Zero-crossing functions are monitored by the
+Inside a segment discrete states, held outputs and modes are frozen.
+Kinks inside memoryless blocks (`saturation`, `dead_zone`, `abs`,
+`compare`, `lookup`) have no crossing function in this version; the
+adaptive step control handles them, so put an event on the input when the
+exact time matters. Zero-crossing functions are monitored by the
 root finder of `lsoda` (or `lsode`, `lsodes`, `lsodar`). When a function
 changes sign, the solver stops at the crossing, the event is applied, and
 integration restarts from the new state.

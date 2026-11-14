@@ -36,7 +36,10 @@ zero crossings need one of \code{"lsoda"}, \code{"lsode"}, \code{"lsodes"} or
 
 \item{rtol, atol}{Relative and absolute tolerances.}
 
-\item{hmax}{Optional maximum step size.}
+\item{hmax}{Optional maximum step size. When the model has zero-crossing
+functions and \code{hmax} is not given, it is \code{(tf - t0) / 100}, because the
+root finder cannot see two crossings inside one step; give a smaller
+value for signals that cross faster.}
 
 \item{maxsteps}{Maximum number of internal steps per segment.}
 

@@ -60,7 +60,7 @@
 #' @return The type name, invisibly.
 #' @examples
 #' sim_register_block_type(
-#'   "cube",
+#'   "cube", overwrite = TRUE,
 #'   build = function(p) list(
 #'     inputs = NA, outputs = NA, feedthrough = TRUE,
 #'     size_out = function(n) n,
