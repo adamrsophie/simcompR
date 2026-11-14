@@ -4,8 +4,9 @@ This is a new submission.
 
 ## Test environments
 
-* GitHub Actions: ubuntu-latest (R release and R devel), macOS-latest
-  (R release), windows-latest (R release), with `R CMD check --as-cran`.
+* GitHub Actions: ubuntu-latest (R release, R devel and R oldrel-1),
+  macOS-latest (R release), windows-latest (R release and R devel), with
+  `R CMD check --as-cran`.
 * GitHub Actions: ubuntu-latest (R release and R devel) with the CRAN
   incoming checks enabled and the PDF manual built.
 * win-builder: R-devel and R-release.
