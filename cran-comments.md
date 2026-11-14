@@ -8,6 +8,7 @@ This is a new submission.
   (R release), windows-latest (R release), with `R CMD check --as-cran`.
 * GitHub Actions: ubuntu-latest (R release and R devel) with the CRAN
   incoming checks enabled and the PDF manual built.
+* win-builder: R-devel and R-release.
 
 ## R CMD check results
 
