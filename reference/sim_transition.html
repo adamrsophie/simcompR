@@ -120,7 +120,9 @@ entry action of the new state, in that order, then records the entry
 time;</p></li>
 <li><p>when no transition fires, runs the <code>during</code> action of the current
 state.</p></li>
-</ol><p>At most one transition fires per sample hit, so evaluation never loops.
+</ol><p>The entry action of the initial state runs at the first sample hit,
+before transitions are considered, with the inputs and time of that hit.</p>
+<p>At most one transition fires per sample hit, so evaluation never loops.
 Outputs are computed after the transition, which means the outputs at a
 hit depend on the inputs at the same hit (direct feedthrough).</p>
 <p>Guards and actions are portable strings or R functions. A guard string

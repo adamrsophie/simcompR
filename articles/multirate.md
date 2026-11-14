@@ -16,7 +16,7 @@ Each distinct `(period, offset)` pair is a *rate*. For every rate the
 simulator computes its hits \text{offset} + k \cdot \text{period} inside
 `tspan` with integer k. All hits, scheduled events and source
 breakpoints are merged into one sorted timeline; times closer than
-10^{-10}\max(1, \|t\|) are treated as the same instant. The integrator
+10^{-12}\max(1, \|t\|) are treated as the same instant. The integrator
 runs from one timeline point to the next.
 
 ## Coincident hits
@@ -72,8 +72,8 @@ k_slow <- floor((times - 0.05) / 0.25 + 1e-9)
 slow_ref <- ifelse(k_slow < 0, 0, floor((0.05 + k_slow * 0.25) / 0.1 + 1e-9) * 0.1)
 c(fast = max(abs(sim_signal(r, "fast") - fast_ref)),
   slow = max(abs(sim_signal(r, "slow") - slow_ref)))
-#>         fast         slow 
-#> 5.551115e-17 5.551115e-17
+#> fast slow 
+#>    0    0
 plot(sim_run(plan, c(0, 1)), c("fast", "slow", "lagged"))
 ```
 

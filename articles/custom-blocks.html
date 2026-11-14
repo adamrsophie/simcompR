@@ -177,7 +177,7 @@ state</td>
 <tr class="odd">
 <td><code>held0</code></td>
 <td>
-<code>function(size)</code> giving held outputs before the first
+<code>function(size, d0)</code> giving held outputs before the first
 hit</td>
 </tr>
 <tr class="even">
@@ -265,7 +265,7 @@ the previous two inputs:</p>
 <span>         nd <span class="op">=</span> <span class="fl">2</span>, d0 <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">0</span><span class="op">)</span>, sample <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">p</span><span class="op">$</span><span class="va">period</span>, <span class="va">p</span><span class="op">$</span><span class="va">offset</span><span class="op">)</span>,</span>
 <span>         output <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">t</span>, <span class="va">x</span>, <span class="va">d</span>, <span class="va">u</span><span class="op">)</span> <span class="op">(</span><span class="va">u</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span> <span class="op">+</span> <span class="va">d</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span> <span class="op">+</span> <span class="va">d</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span><span class="op">)</span> <span class="op">/</span> <span class="fl">3</span>,</span>
 <span>         update <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">t</span>, <span class="va">x</span>, <span class="va">d</span>, <span class="va">u</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">u</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span>, <span class="va">d</span><span class="op">[</span><span class="fl">1</span><span class="op">]</span><span class="op">)</span>,</span>
-<span>         held0 <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">size</span><span class="op">)</span> <span class="fl">0</span><span class="op">)</span></span>
+<span>         held0 <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">size</span>, <span class="va">d0</span><span class="op">)</span> <span class="fl">0</span><span class="op">)</span></span>
 <span>  <span class="op">}</span><span class="op">)</span></span>
 <span></span>
 <span><span class="va">ma</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"ma"</span><span class="op">)</span></span>

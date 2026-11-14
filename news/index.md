@@ -20,8 +20,39 @@ First release.
 - Versioned JSON model files.
 - Fifteen vignettes.
 
+### Known limitations
+
+- Kinks inside memoryless blocks (`saturation`, `dead_zone`, `abs`,
+  `compare`, `lookup`) have no crossing function; put an event on the
+  input when the exact time matters.
+- Top-level events can watch a subsystem output but cannot reset a state
+  inside a subsystem; define such events inside the subsystem.
+- Algebraic loops are solved by Newton iteration with a
+  finite-difference Jacobian, started from zero at each evaluation;
+  there is no initial guess argument yet.
+- Signals are real vectors of fixed size; no buses, matrices or
+  variable-size signals. State machines are flat.
+- [`sim_param()`](https://adamrsophie.github.io/simcompR/reference/sim_param.md)
+  references cannot be combined in arithmetic (write `-a` with a gain
+  block or a separate parameter).
+- Block parameters whose names are a prefix of an argument of
+  [`sim_add_block()`](https://adamrsophie.github.io/simcompR/reference/sim_add_block.md)
+  (`model`, `type`, `name`) or
+  [`sim_set_params()`](https://adamrsophie.github.io/simcompR/reference/sim_set_params.md)
+  (`plan`) are captured by R’s partial matching; avoid names such as `n`
+  or `p`.
+- One [`deSolve::ode()`](https://rdrr.io/pkg/deSolve/man/ode.html) call
+  per segment: fast sample rates over long spans are slow.
+- `method = "radau"` and `method = "iteration"` are not supported; zero
+  crossings need `lsoda`, `lsode`, `lsodes` or `lsodar`.
+
 ### Roadmap
 
+- Buses, hierarchical state machines, crossing functions for saturation
+  and similar blocks, loop initial guesses, a benchmarks directory.
+
 - Graphical diagram editing.
+
 - Physical (acausal) component libraries and DAE initialization.
+
 - Integration with modelcompR, controlcompR and z3r.

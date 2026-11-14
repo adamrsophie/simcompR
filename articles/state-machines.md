@@ -96,7 +96,8 @@ cbind(t = sim_times(r), state = sim_signal(r, "sm.state"), n = sim_signal(r, "sm
 #> [7,] 6     2 33
 ```
 
-The entry action of the initial state runs once before the first hit.
+The entry action of the initial state runs once, at the first hit, with
+the inputs and time of that hit, before any transition is tried.
 
 ## A thermostat in closed loop
 

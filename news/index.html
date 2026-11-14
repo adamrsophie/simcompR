@@ -78,10 +78,24 @@
 <li>Versioned JSON model files.</li>
 <li>Fifteen vignettes.</li>
 </ul><div class="section level3">
+<h3 id="known-limitations-0-1-0">Known limitations<a class="anchor" aria-label="anchor" href="#known-limitations-0-1-0"></a></h3>
+<ul><li>Kinks inside memoryless blocks (<code>saturation</code>, <code>dead_zone</code>, <code>abs</code>, <code>compare</code>, <code>lookup</code>) have no crossing function; put an event on the input when the exact time matters.</li>
+<li>Top-level events can watch a subsystem output but cannot reset a state inside a subsystem; define such events inside the subsystem.</li>
+<li>Algebraic loops are solved by Newton iteration with a finite-difference Jacobian, started from zero at each evaluation; there is no initial guess argument yet.</li>
+<li>Signals are real vectors of fixed size; no buses, matrices or variable-size signals. State machines are flat.</li>
+<li>
+<code><a href="../reference/sim_param.html">sim_param()</a></code> references cannot be combined in arithmetic (write <code>-a</code> with a gain block or a separate parameter).</li>
+<li>Block parameters whose names are a prefix of an argument of <code><a href="../reference/sim_add_block.html">sim_add_block()</a></code> (<code>model</code>, <code>type</code>, <code>name</code>) or <code><a href="../reference/sim_set_params.html">sim_set_params()</a></code> (<code>plan</code>) are captured by R’s partial matching; avoid names such as <code>n</code> or <code>p</code>.</li>
+<li>One <code><a href="https://rdrr.io/pkg/deSolve/man/ode.html" class="external-link">deSolve::ode()</a></code> call per segment: fast sample rates over long spans are slow.</li>
+<li>
+<code>method = "radau"</code> and <code>method = "iteration"</code> are not supported; zero crossings need <code>lsoda</code>, <code>lsode</code>, <code>lsodes</code> or <code>lsodar</code>.</li>
+</ul></div>
+<div class="section level3">
 <h3 id="roadmap-0-1-0">Roadmap<a class="anchor" aria-label="anchor" href="#roadmap-0-1-0"></a></h3>
-<ul><li>Graphical diagram editing.</li>
-<li>Physical (acausal) component libraries and DAE initialization.</li>
-<li>Integration with modelcompR, controlcompR and z3r.</li>
+<ul><li><p>Buses, hierarchical state machines, crossing functions for saturation and similar blocks, loop initial guesses, a benchmarks directory.</p></li>
+<li><p>Graphical diagram editing.</p></li>
+<li><p>Physical (acausal) component libraries and DAE initialization.</p></li>
+<li><p>Integration with modelcompR, controlcompR and z3r.</p></li>
 </ul></div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

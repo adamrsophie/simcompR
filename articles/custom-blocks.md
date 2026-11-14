@@ -28,7 +28,7 @@ with:
 | `output` | `function(t, x, d, u)` returning the outputs |
 | `deriv` | `function(t, x, d, u)` returning \dot x |
 | `update` | `function(t, x, d, u)` returning the next discrete state |
-| `held0` | `function(size)` giving held outputs before the first hit |
+| `held0` | `function(size, d0)` giving held outputs before the first hit |
 | `zc`, `on_zc`, `zc_direction` | zero-crossing functions and handlers |
 | `breakpoints` | times where the block’s output is discontinuous |
 
@@ -111,7 +111,7 @@ sim_register_block_type("moving_average3", category = "user",
          nd = 2, d0 = c(0, 0), sample = c(p$period, p$offset),
          output = function(t, x, d, u) (u[[1]] + d[1] + d[2]) / 3,
          update = function(t, x, d, u) c(u[[1]], d[1]),
-         held0 = function(size) 0)
+         held0 = function(size, d0) 0)
   })
 
 ma <- sim_model("ma")

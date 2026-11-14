@@ -61,10 +61,12 @@ interpolates more output points.
 ## Solvers and tolerances
 
 Any method of
-[`deSolve::ode()`](https://rdrr.io/pkg/deSolve/man/ode.html) can be
-used. The default is `"lsoda"`, which switches automatically between
-stiff and nonstiff methods. Tolerances are `rtol = 1e-6` and
-`atol = 1e-8` by default.
+[`deSolve::ode()`](https://rdrr.io/pkg/deSolve/man/ode.html) that can be
+told to stop at given times can be used, which is every method except
+`"radau"`. Models with zero crossings need a root-finding method:
+`"lsoda"`, `"lsode"`, `"lsodes"` or `"lsodar"`. The default is
+`"lsoda"`, which switches automatically between stiff and nonstiff
+methods. Tolerances are `rtol = 1e-6` and `atol = 1e-8` by default.
 
 ``` r
 
@@ -290,7 +292,7 @@ r <- suppressWarnings(sim_run(sim_compile(blow), c(0, 2), on_failure = "warn"))
 r$status
 #> [1] "failed"
 r$message
-#> [1] "the integrator stopped at t = 0.999998 before reaching 2 (deSolve istate -2)"
+#> [1] "the states became NaN or infinite at t = 0.999998"
 max(sim_times(r))
 #> [1] 0.99
 ```

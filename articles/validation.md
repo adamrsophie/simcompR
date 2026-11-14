@@ -169,7 +169,7 @@ data.frame(problem = names(checks), max_abs_error = signif(unlist(checks), 3),
 #> 4    second_order      3.65e-10
 #> 5      recurrence      0.00e+00
 #> 6 sampled_control      1.08e-10
-#> 7         impacts      1.64e-14
+#> 7         impacts      4.37e-14
 #> 8  algebraic_loop      0.00e+00
 ```
 

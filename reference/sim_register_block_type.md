@@ -98,8 +98,11 @@ The list returned by `build(p)` may contain:
 - `update(t, x, d, u)`: next discrete state, called at sample hits after
   all outputs at that instant have been computed.
 
-- `held0(d)`: initial held output of a discrete block before its first
-  sample hit.
+- `held0(size, d0)`: initial held output of a discrete block before its
+  first sample hit. `size` holds the output port sizes and `d0`, when
+  the function accepts it, the initial discrete state (including
+  overrides given to
+  [`sim_run()`](https://adamrsophie.github.io/simcompR/reference/sim_run.md)).
 
 - `zc(t, x, d, u)` and `on_zc(i, direction, t, x, d, u)`: zero-crossing
   functions and their handler, which returns
@@ -116,7 +119,7 @@ trial points that it may later reject.
 
 ``` r
 sim_register_block_type(
-  "cube",
+  "cube", overwrite = TRUE,
   build = function(p) list(
     inputs = NA, outputs = NA, feedthrough = TRUE,
     size_out = function(n) n,

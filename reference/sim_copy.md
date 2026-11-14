@@ -1,7 +1,8 @@
 # Copy a model
 
 Models are modified in place, so assigning a model to a new variable
-does not copy it. `sim_copy()` returns an independent copy.
+does not copy it. `sim_copy()` returns an independent copy, including
+independent copies of nested subsystem models.
 
 ## Usage
 

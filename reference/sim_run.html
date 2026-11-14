@@ -117,7 +117,10 @@ zero crossings need one of <code>"lsoda"</code>, <code>"lsode"</code>, <code>"ls
 
 
 <dt id="arg-hmax">hmax<a class="anchor" aria-label="anchor" href="#arg-hmax"></a></dt>
-<dd><p>Optional maximum step size.</p></dd>
+<dd><p>Optional maximum step size. When the model has zero-crossing
+functions and <code>hmax</code> is not given, it is <code>(tf - t0) / 100</code>, because the
+root finder cannot see two crossings inside one step; give a smaller
+value for signals that cross faster.</p></dd>
 
 
 <dt id="arg-maxsteps">maxsteps<a class="anchor" aria-label="anchor" href="#arg-maxsteps"></a></dt>
@@ -166,7 +169,7 @@ which prevents retriggering the same root.</p></dd>
 discrete block, every scheduled event time and every breakpoint of a
 source (for example the time of a step). Sample hits are computed as
 <code>offset + k * period</code> with integer <code>k</code>, never by accumulating <code>period</code>,
-so they do not drift. Hits closer than <code>1e-10 * max(1, |t|)</code> are treated
+so they do not drift. Hits closer than <code>1e-12 * max(1, |t|)</code> are treated
 as simultaneous.</p>
 <p><strong>At a segment boundary</strong> the simulator, in this order:</p><ol><li><p>applies scheduled events (in priority order);</p></li>
 <li><p>evaluates the outputs of all blocks with a sample hit, in execution

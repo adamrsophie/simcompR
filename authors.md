@@ -10,11 +10,11 @@ Source:
 [`DESCRIPTION`](https://github.com/adamrsophie/simcompR/blob/main/DESCRIPTION)
 
 Sophie A (2026). *simcompR: Block-Diagram Modeling and Dynamic System
-Simulation in R*. R package version 0.1.0,
+Simulation*. R package version 0.1.0,
 <https://github.com/adamrsophie/simcompR>.
 
     @Manual{,
-      title = {simcompR: Block-Diagram Modeling and Dynamic System Simulation in R},
+      title = {simcompR: Block-Diagram Modeling and Dynamic System Simulation},
       author = {Adam R Sophie},
       year = {2026},
       note = {R package version 0.1.0},

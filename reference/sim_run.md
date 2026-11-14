@@ -54,7 +54,10 @@ sim_run(
 
 - hmax:
 
-  Optional maximum step size.
+  Optional maximum step size. When the model has zero-crossing functions
+  and `hmax` is not given, it is `(tf - t0) / 100`, because the root
+  finder cannot see two crossings inside one step; give a smaller value
+  for signals that cross faster.
 
 - maxsteps:
 
@@ -105,7 +108,7 @@ and [`plot()`](https://rdrr.io/r/graphics/plot.default.html).
 discrete block, every scheduled event time and every breakpoint of a
 source (for example the time of a step). Sample hits are computed as
 `offset + k * period` with integer `k`, never by accumulating `period`,
-so they do not drift. Hits closer than `1e-10 * max(1, |t|)` are treated
+so they do not drift. Hits closer than `1e-12 * max(1, |t|)` are treated
 as simultaneous.
 
 **At a segment boundary** the simulator, in this order:

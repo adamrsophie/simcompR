@@ -98,7 +98,7 @@ sim_connect(bad, "one", "s", input = 1)
 sim_connect(bad, "s", "s", input = 2)
 sim_run(sim_compile(bad, algebraic_loops = "solve"), c(0, 1))
 #> Error:
-#> ! Simulation failed at t = 0: Algebraic loop {s} at t = 0: singular Jacobian, the loop has no unique solution..
+#> ! Simulation failed at t = 0: Algebraic loop {s} at t = 0: singular Jacobian, the loop has no unique solution.
 ```
 
 ## Loops inside dynamics

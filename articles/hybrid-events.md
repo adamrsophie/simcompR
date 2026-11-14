@@ -7,7 +7,9 @@ library(simcompR)
 
 Hybrid systems combine continuous evolution with instantaneous changes:
 resets, mode switches and stops. `simcompR` handles them by integrating
-smooth segments and stopping the solver exactly at every discontinuity.
+segments and stopping the solver at the discontinuities it knows about:
+source breakpoints, sample hits, scheduled events and located zero
+crossings.
 
 ## Kinds of discontinuity
 
@@ -19,11 +21,14 @@ smooth segments and stopping the solver exactly at every discontinuity.
 | `sim_add_event(trigger = sim_zero_crossing(...))` | root finding | impacts, thresholds |
 | `switch`, `relay`, `stop` blocks | root finding | mode changes, termination |
 
-Inside a segment the right-hand side is smooth: discrete states, held
-outputs and modes are frozen. Zero-crossing functions are monitored by
-the root finder of `lsoda` (or `lsode`, `lsodes`, `lsodar`). When a
-function changes sign, the solver stops at the crossing, the event is
-applied, and integration restarts from the new state.
+Inside a segment discrete states, held outputs and modes are frozen.
+Kinks inside memoryless blocks (`saturation`, `dead_zone`, `abs`,
+`compare`, `lookup`) have no crossing function in this version; the
+adaptive step control handles them, so put an event on the input when
+the exact time matters. Zero-crossing functions are monitored by the
+root finder of `lsoda` (or `lsode`, `lsodes`, `lsodar`). When a function
+changes sign, the solver stops at the crossing, the event is applied,
+and integration restarts from the new state.
 
 ## The bouncing ball
 
@@ -75,11 +80,11 @@ exact <- t1
 for (i in 1:4) { exact <- c(exact, tail(exact, 1) + 2 * v / g); v <- 0.8 * v }
 cbind(simulated = sim_events(r)$time[1:5], exact, error = sim_events(r)$time[1:5] - exact)
 #>      simulated     exact        error
-#> [1,] 0.6385509 0.6385509 7.216450e-15
-#> [2,] 1.6602322 1.6602322 3.663736e-14
-#> [3,] 2.4775773 2.4775773 1.141309e-13
-#> [4,] 3.1314534 3.1314534 2.051692e-13
-#> [5,] 3.6545543 3.6545543 3.099743e-13
+#> [1,] 0.6385509 0.6385509 7.660539e-15
+#> [2,] 1.6602322 1.6602322 1.976197e-14
+#> [3,] 2.4775773 2.4775773 2.753353e-14
+#> [4,] 3.1314534 3.1314534 6.483702e-14
+#> [5,] 3.6545543 3.6545543 1.163514e-13
 ```
 
 The differences are event-location errors of the root finder, controlled
@@ -220,7 +225,7 @@ sim_add_event(st, "half", sim_zero_crossing("x", level = 0.5), terminal = TRUE)
 r <- sim_run(sim_compile(st), c(0, 10))
 c(status = r$status, end = max(r$time), exact = log(2))
 #>              status                 end               exact 
-#>        "terminated" "0.693148260844399" "0.693147180559945"
+#>        "terminated" "0.693147624240805" "0.693147180559945"
 ```
 
 ## Simultaneous events
