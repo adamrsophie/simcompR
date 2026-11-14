@@ -30,7 +30,6 @@ Depends:
 Imports:
     deSolve,
     graphics,
-    grDevices,
     jsonlite,
     parallel,
     stats,

@@ -349,7 +349,12 @@ integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
                               rtol, atol, maxsteps, zc_tol, nzc, ode_args) {
   y0 <- if (dummy) 0 else x
   xs <- function(y) if (dummy) numeric() else y
+  # Inside a segment, inputs take their left limit at the end point: a
+  # source that jumps at tn must not leak its next value into this segment
+  # when the solver evaluates the right-hand side exactly at tn.
+  t_left <- tn - time_tol(tn) / 2
   func <- function(tt, y, parms) {
+    tt <- min(tt, t_left)
     sig <- evaluate(plan, tt, xs(y), d, held)$sig
     list(if (dummy) 0 else derivatives(plan, tt, y, d, sig))
   }
@@ -362,6 +367,7 @@ integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
     off <- ifelse(abs(g0) <= zc_tol, g0, 0)
     args$rootfunc <- function(tt, y, parms) {
       xx <- xs(y)
+      tt <- min(tt, t_left)
       zero_crossings(plan, tt, xx, d, evaluate(plan, tt, xx, d, held)$sig) - off
     }
   }
