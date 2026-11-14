@@ -45,8 +45,10 @@ jobs:
           extra-packages: any::rcmdcheck, any::spelling, any::urlchecker
           needs: check
 
-      - name: Install LaTeX packages for the manual
-        run: tlmgr install inconsolata helvetic courier psnfss times ec
+      - name: Install LaTeX packages for the manual and HTML Tidy
+        run: |
+          tlmgr install inconsolata helvetic courier psnfss times ec makeindex
+          sudo apt-get update -qq && sudo apt-get install -y -qq tidy
 
       - name: Build and check as CRAN does, with the PDF manual
         run: |
@@ -54,6 +56,13 @@ jobs:
           tarball=$(ls simcompR_*.tar.gz)
           R CMD check --as-cran --timings "$tarball" || true
           cat simcompR.Rcheck/00check.log
+        shell: bash
+
+      - name: Show LaTeX errors of the manual
+        if: always()
+        run: |
+          R CMD Rd2pdf --no-preview --no-clean --output=manual.pdf . || true
+          for f in $(find . -name "Rd2.log" -o -name "*.ilg"); do echo "== $f"; grep -n -B2 -A8 "^!\|Error\|error" "$f" | head -60; done
         shell: bash
 
       - name: Example timings over 2 seconds
