@@ -3,69 +3,222 @@
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <title>Block-Diagram Modeling and Dynamic System Simulation in R • simcompR</title>
-<!-- jquery --><script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js" integrity="sha512-v2CJ7UaYy4JwqLDIrZUI/4hqeoQieOmAZNXBeQyjo21dadnwR+8ZaIJVT8EE2iyI61OV8e6M8PP2/4hpQINQ/g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script><!-- Bootstrap --><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.4.1/css/bootstrap.min.css" integrity="sha256-bZLfwXAP04zRMK2BjiO8iu9pf4FbLqX6zitd+tIvLhE=" crossorigin="anonymous">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.4.1/js/bootstrap.min.js" integrity="sha256-nuL8/2cJ5NDSSwnKD8VqreErSWHtnEP9E7AySL+1ev4=" crossorigin="anonymous"></script><!-- bootstrap-toc --><link rel="stylesheet" href="bootstrap-toc.css">
-<script src="bootstrap-toc.js"></script><!-- Font Awesome icons --><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css" integrity="sha256-mmgLkCYLUQbXn0B1SRqzHar6dCnv9oZFPEC1g1cwlkk=" crossorigin="anonymous">
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/v4-shims.min.css" integrity="sha256-wZjR52fzng1pJHwx4aV2AO3yyTOXrcDW7jBpJtTwVxw=" crossorigin="anonymous">
-<!-- clipboard.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.6/clipboard.min.js" integrity="sha256-inc5kl9MA1hkeYUt+EC3BhlIgyp/2jDIyBLS6k3UxPI=" crossorigin="anonymous"></script><!-- headroom.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/headroom/0.11.0/headroom.min.js" integrity="sha256-AsUX4SJE1+yuDu5+mAVzJbuYNPHj/WroHuZ8Ir/CkE0=" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/headroom/0.11.0/jQuery.headroom.min.js" integrity="sha256-ZX/yNShbjqsohH1k95liqY9Gd8uOiE1S4vZc+9KQ1K4=" crossorigin="anonymous"></script><!-- pkgdown --><link href="pkgdown.css" rel="stylesheet">
-<script src="pkgdown.js"></script><meta property="og:title" content="Block-Diagram Modeling and Dynamic System Simulation in R">
+<!-- favicons --><link rel="icon" type="image/png" sizes="96x96" href="favicon-96x96.png">
+<link rel="icon" type="”image/svg+xml”" href="favicon.svg">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="icon" sizes="any" href="favicon.ico">
+<link rel="manifest" href="site.webmanifest">
+<!-- katex math --><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" integrity="sha384-nB0miv6/jRmo5UMMR1wu3Gz6NLsoTkbqJghGIsx//Rlm+ZU03BU6SQNC66uf4l5+" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js" integrity="sha384-7zkQWkzuo3B5mTepMUcHkMB5jZaolc2xDwL6VFqjFALcbeS9Ggm/Yr2r3Dy4lfFg" crossorigin="anonymous"></script><script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js" integrity="sha384-43gviWU0YVjaDtb/GhzOouOXtZMP/7XUzwPTstBeZFe/+rCMvRwr4yROQP43s0Xk" crossorigin="anonymous" onload="renderMathInElement(document.body);"></script><script src="katex-auto.js"></script><script src="lightswitch.js"></script><script src="deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+<link href="deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet">
+<script src="deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
+<link href="deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
+<script src="deps/headroom-0.11.0/headroom.min.js"></script><script src="deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="deps/search-1.0.0/fuse.min.js"></script><script src="deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="pkgdown.js"></script><meta property="og:title" content="Block-Diagram Modeling and Dynamic System Simulation in R">
+<meta name="description" content="A code-first framework for building and simulating block diagrams of dynamic systems. Models are directed graphs of blocks with typed, sized input and output ports. Compilation validates connections and signal dimensions, analyzes direct-feedthrough dependencies, detects algebraic loops through strongly connected components (and can solve them with Newton iterations), and builds a deterministic, insertion-order invariant execution schedule. The runtime integrates continuous states with deSolve, advances discrete and multirate blocks on an exact integer-indexed sample clock with defined output-before-update semantics, restarts integration at scheduled discontinuities, and locates zero crossings for state resets, mode changes and terminal events. Hierarchical parameterized subsystems, Stateflow-like state machines, portable JSON model files, parameter sweeps and reproducible Monte Carlo experiments are included. The design is inspired by Simulink and bdsim &lt;https://github.com/petercorke/bdsim&gt;; no Python or MATLAB is required.">
 <meta property="og:description" content="A code-first framework for building and simulating block diagrams of dynamic systems. Models are directed graphs of blocks with typed, sized input and output ports. Compilation validates connections and signal dimensions, analyzes direct-feedthrough dependencies, detects algebraic loops through strongly connected components (and can solve them with Newton iterations), and builds a deterministic, insertion-order invariant execution schedule. The runtime integrates continuous states with deSolve, advances discrete and multirate blocks on an exact integer-indexed sample clock with defined output-before-update semantics, restarts integration at scheduled discontinuities, and locates zero crossings for state resets, mode changes and terminal events. Hierarchical parameterized subsystems, Stateflow-like state machines, portable JSON model files, parameter sweeps and reproducible Monte Carlo experiments are included. The design is inspired by Simulink and bdsim &lt;https://github.com/petercorke/bdsim&gt;; no Python or MATLAB is required.">
-<!-- mathjax --><script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js" integrity="sha256-nvJJv9wWKEm88qvoQl9ekL2J+k/RWIsaSScxxlsrv8k=" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/config/TeX-AMS-MML_HTMLorMML.js" integrity="sha256-84DKXVJXs0/F8OTMzX4UR909+jtl4G7SPypPavF+GfA=" crossorigin="anonymous"></script><!--[if lt IE 9]>
-<script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
-<script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
-<![endif]-->
+<meta property="og:image" content="https://adamrsophie.github.io/simcompR/logo.svg">
 </head>
-<body data-spy="scroll" data-target="#toc">
+<body>
+    <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
-    <div class="container template-home">
-      <header><div class="navbar navbar-default navbar-fixed-top" role="navigation">
-  <div class="container">
-    <div class="navbar-header">
-      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar" aria-expanded="false">
-        <span class="sr-only">Toggle navigation</span>
-        <span class="icon-bar"></span>
-        <span class="icon-bar"></span>
-        <span class="icon-bar"></span>
-      </button>
-      <span class="navbar-brand">
-        <a class="navbar-link" href="index.html">simcompR</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="">0.1.0</span>
-      </span>
-    </div>
+    <nav class="navbar navbar-expand-lg fixed-top " aria-label="Site navigation"><div class="container">
 
-    <div id="navbar" class="navbar-collapse collapse">
-      <ul class="nav navbar-nav">
-<li>
-  <a href="reference/index.html">Reference</a>
+    <a class="navbar-brand me-2" href="index.html">simcompR</a>
+
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+
+
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div id="navbar" class="collapse navbar-collapse ms-3">
+      <ul class="navbar-nav me-auto">
+<li class="nav-item"><a class="nav-link" href="articles/simcompR.html">Get started</a></li>
+<li class="nav-item"><a class="nav-link" href="reference/index.html">Reference</a></li>
+<li class="nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
+  <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
+<li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Getting started</h6></li>
+    <li><a class="dropdown-item" href="articles/ports-and-signals.html">Block ports and signals</a></li>
+    <li><a class="dropdown-item" href="articles/compilation.html">Graph compilation and execution order</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Simulation</h6></li>
+    <li><a class="dropdown-item" href="articles/continuous-simulation.html">Continuous-time simulation</a></li>
+    <li><a class="dropdown-item" href="articles/feedback-systems.html">Negative feedback systems</a></li>
+    <li><a class="dropdown-item" href="articles/discrete-time.html">Discrete-time simulation</a></li>
+    <li><a class="dropdown-item" href="articles/multirate.html">Multirate execution</a></li>
+    <li><a class="dropdown-item" href="articles/hybrid-events.html">Hybrid dynamics, events and zero crossings</a></li>
+    <li><a class="dropdown-item" href="articles/algebraic-loops.html">Algebraic loops</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Structure and logic</h6></li>
+    <li><a class="dropdown-item" href="articles/subsystems.html">Hierarchical subsystems</a></li>
+    <li><a class="dropdown-item" href="articles/state-machines.html">State machines</a></li>
+    <li><a class="dropdown-item" href="articles/custom-blocks.html">Writing custom blocks</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><h6 class="dropdown-header" data-toc-skip>Experiments and validation</h6></li>
+    <li><a class="dropdown-item" href="articles/experiments.html">Parameter sweeps and Monte Carlo experiments</a></li>
+    <li><a class="dropdown-item" href="articles/model-files.html">Saving and loading models</a></li>
+    <li><a class="dropdown-item" href="articles/validation.html">Validation against exact solutions</a></li>
+  </ul>
 </li>
+<li class="nav-item"><a class="nav-link" href="news/index.html">Changelog</a></li>
       </ul>
-<ul class="nav navbar-nav navbar-right">
-<li>
-  <a href="https://github.com/adamrsophie/simcompR/" class="external-link">
-    <span class="fab fa-github fa-lg"></span>
-
-  </a>
+<ul class="navbar-nav">
+<li class="nav-item"><form class="form-inline" role="search">
+ <input class="form-control" type="search" name="search-input" id="search-input" autocomplete="off" aria-label="Search site" placeholder="Search for" data-search-index="search.json">
+</form></li>
+<li class="nav-item dropdown">
+  <button class="nav-link dropdown-toggle" type="button" id="dropdown-lightswitch" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true" aria-label="Light switch"><span class="fa fa-sun"></span></button>
+  <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="dropdown-lightswitch">
+<li><button class="dropdown-item" data-bs-theme-value="light"><span class="fa fa-sun"></span> Light</button></li>
+    <li><button class="dropdown-item" data-bs-theme-value="dark"><span class="fa fa-moon"></span> Dark</button></li>
+    <li><button class="dropdown-item" data-bs-theme-value="auto"><span class="fa fa-adjust"></span> Auto</button></li>
+  </ul>
 </li>
+<li class="nav-item"><a class="external-link nav-link" href="https://github.com/adamrsophie/simcompR/" aria-label="GitHub"><span class="fa fab fa-github fa-lg"></span></a></li>
       </ul>
 </div>
-<!--/.nav-collapse -->
+
+
   </div>
-<!--/.container -->
+</nav><div class="container template-home">
+<div class="row">
+  <main id="main" class="col-md-9"><div class="section level1">
+<div class="page-header">
+<img src="logo.svg" class="logo" alt=""><h1 id="simcompr-block-diagram-simulation-of-dynamical-systems-in-r-">simcompR: Block-Diagram Simulation of Dynamical Systems in R <a class="anchor" aria-label="anchor" href="#simcompr-block-diagram-simulation-of-dynamical-systems-in-r-"></a>
+</h1>
 </div>
-<!--/.navbar -->
+<!-- badges: start -->
 
-
-
-      </header><div class="row">
-  <div class="contents col-md-9">
-A code-first framework for building and simulating block diagrams of dynamic systems. Models are directed graphs of blocks with typed, sized input and output ports. Compilation validates connections and signal dimensions, analyzes direct-feedthrough dependencies, detects algebraic loops through strongly connected components (and can solve them with Newton iterations), and builds a deterministic, insertion-order invariant execution schedule. The runtime integrates continuous states with 'deSolve', advances discrete and multirate blocks on an exact integer-indexed sample clock with defined output-before-update semantics, restarts integration at scheduled discontinuities, and locates zero crossings for state resets, mode changes and terminal events. Hierarchical parameterized subsystems, Stateflow-like state machines, portable JSON model files, parameter sweeps and reproducible Monte Carlo experiments are included. The design is inspired by 'Simulink' and 'bdsim' &lt;<a href="https://github.com/petercorke/bdsim" class="external-link">https://github.com/petercorke/bdsim</a>&gt;; no 'Python' or 'MATLAB' is required.
-  </div>
-
-  <div class="col-md-3 hidden-xs hidden-sm" id="pkgdown-sidebar">
-    <div class="links">
+<p><strong><em>simcompR</em></strong> builds and simulates block diagrams in R, in the spirit of Simulink and Python’s bdsim. A model is a graph of blocks connected by signal wires. It is compiled into an execution plan and then simulated:</p>
+<p><strong>model, connections, compilation (sizes, feedthrough graph, execution order), continuous integration, sample hits, events, results</strong>.</p>
+<p>Continuous dynamics are integrated with <a href="https://cran.r-project.org/package=deSolve" class="external-link">deSolve</a>. Discrete blocks run at exact sample times, several rates can be mixed, zero crossings are located by root finding, and algebraic loops are detected (and, on request, solved).</p>
+<div class="section level2">
+<h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
+</h2>
+<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># install.packages("remotes")</span></span>
+<span><span class="fu">remotes</span><span class="fu">::</span><span class="fu">install_github</span><span class="op">(</span><span class="st">"adamrsophie/simcompR"</span><span class="op">)</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="quick-start">Quick start<a class="anchor" aria-label="anchor" href="#quick-start"></a>
+</h2>
+<p>A proportional controller with a saturating actuator and a first-order plant:</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/adamrsophie/simcompR" class="external-link">simcompR</a></span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">m</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"loop"</span>, params <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>K <span class="op">=</span> <span class="fl">4</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">m</span>, <span class="st">"step"</span>, <span class="st">"reference"</span>, time <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">m</span>, <span class="st">"subtract"</span>, <span class="st">"error"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">m</span>, <span class="st">"gain"</span>, <span class="st">"controller"</span>, gain <span class="op">=</span> <span class="fu"><a href="reference/sim_param.html">sim_param</a></span><span class="op">(</span><span class="st">"K"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">m</span>, <span class="st">"saturation"</span>, <span class="st">"actuator"</span>, lower <span class="op">=</span> <span class="op">-</span><span class="fl">2</span>, upper <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">m</span>, <span class="st">"transfer_function"</span>, <span class="st">"plant"</span>, num <span class="op">=</span> <span class="fl">1</span>, den <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.5</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">m</span>, <span class="st">"reference"</span>, <span class="st">"error"</span>, input <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">m</span>, <span class="st">"plant"</span>, <span class="st">"error"</span>, input <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">m</span>, <span class="st">"error"</span>, <span class="st">"controller"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">m</span>, <span class="st">"controller"</span>, <span class="st">"actuator"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">m</span>, <span class="st">"actuator"</span>, <span class="st">"plant"</span><span class="op">)</span></span>
+<span></span>
+<span><span class="va">plan</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">m</span><span class="op">)</span>          <span class="co"># sizes, feedthrough graph, execution order</span></span>
+<span><span class="va">r</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="va">plan</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">5</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">r</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"reference"</span>, <span class="st">"plant"</span>, <span class="st">"actuator"</span><span class="op">)</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># same structure, different gain</span></span>
+<span><span class="va">r2</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="fu"><a href="reference/sim_set_params.html">sim_set_params</a></span><span class="op">(</span><span class="va">plan</span>, K <span class="op">=</span> <span class="fl">10</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">5</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<p>The loop through <code>plant</code> is legal because a strictly proper transfer function has no direct feedthrough. A loop made only of gains and sums is an algebraic loop and is reported at compile time.</p>
+</div>
+<div class="section level2">
+<h2 id="what-is-implemented">What is implemented<a class="anchor" aria-label="anchor" href="#what-is-implemented"></a>
+</h2>
+<table class="table">
+<colgroup>
+<col width="37%">
+<col width="62%">
+</colgroup>
+<thead><tr>
+<th>Area</th>
+<th>Features</th>
+</tr></thead>
+<tbody>
+<tr>
+<td>Models</td>
+<td>blocks, named and numbered ports, connections, model parameters, copies, editing</td>
+</tr>
+<tr>
+<td>Compilation</td>
+<td>size propagation, direct-feedthrough graph, Tarjan components, deterministic order, plan reuse</td>
+</tr>
+<tr>
+<td>Continuous</td>
+<td>integrator, transfer function, state space, general <code>ode</code> blocks; any deSolve method</td>
+</tr>
+<tr>
+<td>Discrete</td>
+<td>unit delay, zero-order hold, discrete integrators, discrete state space and transfer functions</td>
+</tr>
+<tr>
+<td>Multirate</td>
+<td>several sample rates and offsets, exact hit times, outputs before updates, rate notes</td>
+</tr>
+<tr>
+<td>Hybrid</td>
+<td>scheduled and zero-crossing events, resets, switch, relay, stop, event limits</td>
+</tr>
+<tr>
+<td>Algebraic loops</td>
+<td>detection with a printed cycle; optional Newton solution with diagnostics</td>
+</tr>
+<tr>
+<td>Structure</td>
+<td>reusable subsystems, nesting, parameter namespaces</td>
+</tr>
+<tr>
+<td>Logic</td>
+<td>state machines with guards, priorities, timed transitions, actions</td>
+</tr>
+<tr>
+<td>Experiments</td>
+<td>parameter sweeps, Monte Carlo with fixed seeds, seeded noise, optional parallel runs</td>
+</tr>
+<tr>
+<td>Files</td>
+<td>versioned JSON with exact numbers; non-portable content refused, expressions whitelisted</td>
+</tr>
+<tr>
+<td>Results</td>
+<td>signals, states, events, data frames, plots, diagnostics, DOT export</td>
+</tr>
+</tbody>
+</table>
+<p>Not implemented: graphical editing, code generation, physical (acausal) modeling, consistent DAE initialization. See the roadmap in <code>NEWS.md</code>.</p>
+</div>
+<div class="section level2">
+<h2 id="validation">Validation<a class="anchor" aria-label="anchor" href="#validation"></a>
+</h2>
+<p>The test suite compares simulations with closed-form answers: exponential decay, harmonic motion, the matrix exponential, second-order step responses, discrete recurrences, sampled control against exact zero-order-hold discretization, multirate timelines and bouncing ball impact times. It runs on Linux, macOS and Windows for every change. <code><a href="articles/validation.html">vignette("validation")</a></code> reproduces the comparisons.</p>
+</div>
+<div class="section level2">
+<h2 id="documentation">Documentation<a class="anchor" aria-label="anchor" href="#documentation"></a>
+</h2>
+<p>Fifteen vignettes cover the package from a first model to custom blocks; start with <code><a href="articles/simcompR.html">vignette("simcompR")</a></code> or the <a href="https://adamrsophie.github.io/simcompR/">website</a>.</p>
+</div>
+<div class="section level2">
+<h2 id="related-packages">Related packages<a class="anchor" aria-label="anchor" href="#related-packages"></a>
+</h2>
+<p>simcompR belongs to a family of R packages by the same author: <a href="https://github.com/adamrsophie/symcompR" class="external-link">symcompR</a> (symbolic computation), <a href="https://github.com/adamrsophie/modelcompR" class="external-link">modelcompR</a> (equation-based modeling), <a href="https://github.com/adamrsophie/jaxR" class="external-link">jaxR</a> (differentiable computation), <a href="https://github.com/adamrsophie/z3r" class="external-link">z3r</a> (constraint solving), <a href="https://github.com/adamrsophie/optcompR" class="external-link">optcompR</a> (optimization), <a href="https://github.com/adamrsophie/graphlearnR" class="external-link">graphlearnR</a>, <a href="https://github.com/adamrsophie/pdecompR" class="external-link">pdecompR</a> (finite elements) and <a href="https://github.com/adamrsophie/controlcompR" class="external-link">controlcompR</a> (control). simcompR works on its own; integrations are planned and will stay optional.</p>
+</div>
+<div class="section level2">
+<h2 id="license">License<a class="anchor" aria-label="anchor" href="#license"></a>
+</h2>
+<p>GPL-3.</p>
+</div>
+</div>
+  </main><aside class="col-md-3"><div class="links">
 <h2 data-toc-skip>Links</h2>
 <ul class="list-unstyled">
 <li><a href="https://github.com/adamrsophie/simcompR/" class="external-link">Browse source code</a></li>
@@ -81,7 +234,6 @@ A code-first framework for building and simulating block diagrams of dynamic sys
 </ul>
 </div>
 
-
 <div class="citation">
 <h2 data-toc-skip>Citation</h2>
 <ul class="list-unstyled">
@@ -96,25 +248,30 @@ A code-first framework for building and simulating block diagrams of dynamic sys
 </ul>
 </div>
 
+<div class="dev-status">
+<h2 data-toc-skip>Dev status</h2>
+<ul class="list-unstyled">
+<li><a href="https://github.com/adamrsophie/simcompR/actions/workflows/R-CMD-check.yaml" class="external-link"><img src="https://github.com/adamrsophie/simcompR/actions/workflows/R-CMD-check.yaml/badge.svg" alt="R-CMD-check"></a></li>
+<li><a href="https://adamrsophie.github.io/simcompR/"><img src="https://github.com/adamrsophie/simcompR/actions/workflows/pkgdown.yaml/badge.svg" alt="pkgdown"></a></li>
+<li><a href="https://lifecycle.r-lib.org/articles/stages.html#experimental" class="external-link"><img src="https://img.shields.io/badge/lifecycle-experimental-orange.svg" alt="Lifecycle: experimental"></a></li>
+<li><a href="https://www.gnu.org/licenses/gpl-3.0" class="external-link"><img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="License: GPL v3"></a></li>
+</ul>
+</div>
 
-
-  </div>
+  </aside>
 </div>
 
 
-      <footer><div class="copyright">
-  <p></p>
-<p>Developed by Adam R Sophie.</p>
+    <footer><div class="pkgdown-footer-left">
+  <p>Developed by Adam R Sophie.</p>
 </div>
 
-<div class="pkgdown">
-  <p></p>
-<p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
+<div class="pkgdown-footer-right">
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.2.1.</p>
 </div>
 
-      </footer>
+    </footer>
 </div>
-
 
 
 

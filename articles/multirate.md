@@ -1,0 +1,120 @@
+# Multirate execution
+
+``` r
+
+library(simcompR)
+```
+
+A model may mix continuous dynamics with discrete blocks running on
+different clocks: a plant integrated continuously, a sensor sampled
+every 20 ms, a controller every 10 ms and supervisory logic every 100
+ms. This vignette explains how `simcompR` schedules them.
+
+## The timeline
+
+Each distinct `(period, offset)` pair is a *rate*. For every rate the
+simulator computes its hits \text{offset} + k \cdot \text{period} inside
+`tspan` with integer k. All hits, scheduled events and source
+breakpoints are merged into one sorted timeline; times closer than
+10^{-10}\max(1, \|t\|) are treated as the same instant. The integrator
+runs from one timeline point to the next.
+
+## Coincident hits
+
+When several rates hit at the same instant, the rule is the same as for
+a single rate: all blocks with a hit compute their outputs in execution
+order (so a fast block feeding a slow one is computed first), then all
+of them update their states.
+
+## Transferring data between rates
+
+A discrete block reads its inputs only at its own hits. Whatever is on
+the wire at that instant is used; in between, the reader keeps its own
+held output. Reading a slower block from a faster one therefore sees the
+slow block’s held value (a zero-order hold), and reading a faster block
+from a slower one samples it. Use an explicit `zero_order_hold` to make
+the rate transition visible in the diagram.
+[`sim_diagnostics()`](https://adamrsophie.github.io/simcompR/reference/sim_diagnostics.md)
+lists every connection between different rates:
+
+``` r
+
+m <- sim_model("rates")
+sim_add_block(m, "time", "t")
+sim_add_block(m, "zero_order_hold", "fast", period = 0.1)
+sim_add_block(m, "zero_order_hold", "slow", period = 0.25, offset = 0.05)
+sim_add_block(m, "unit_delay", "lagged", period = 0.25, offset = 0.05)
+sim_connect(m, "t", "fast")
+sim_connect(m, "fast", "slow")
+sim_connect(m, "fast", "lagged")
+plan <- sim_compile(m)
+plan
+#> <sim_plan 'rates'> 4 block(s), 0 continuous state(s), 1 discrete state(s), 4 signal element(s)
+#> Execution order: lagged > t > fast > slow
+#> Sample rates:
+#>   period 0.1, offset 0: fast
+#>   period 0.25, offset 0.05: lagged, slow
+sim_diagnostics(plan)$notes
+#> [1] "'lagged' (period 0.25) reads 'fast' (period 0.1): the value is the one held at the reader's sample hit (zero-order hold across rates)."
+#> [2] "'slow' (period 0.25) reads 'fast' (period 0.1): the value is the one held at the reader's sample hit (zero-order hold across rates)."
+```
+
+## A reference timeline
+
+The values can be checked against an independently computed timeline:
+
+``` r
+
+times <- seq(0, 1, 0.01)
+r <- sim_run(plan, c(0, 1), times = times, include_ticks = FALSE)
+fast_ref <- floor(times / 0.1 + 1e-9) * 0.1
+k_slow <- floor((times - 0.05) / 0.25 + 1e-9)
+slow_ref <- ifelse(k_slow < 0, 0, floor((0.05 + k_slow * 0.25) / 0.1 + 1e-9) * 0.1)
+c(fast = max(abs(sim_signal(r, "fast") - fast_ref)),
+  slow = max(abs(sim_signal(r, "slow") - slow_ref)))
+#>         fast         slow 
+#> 5.551115e-17 5.551115e-17
+plot(sim_run(plan, c(0, 1)), c("fast", "slow", "lagged"))
+```
+
+![](multirate_files/figure-html/unnamed-chunk-4-1.png)
+
+At t = 0.3 and t = 0.8 both rates hit. `slow` then reads the *new* value
+of `fast`, because `fast` is computed first.
+
+## A plant with a sensor, controller and supervisor
+
+``` r
+
+cl <- sim_model("multirate_control", params = list(K = 4))
+sim_add_block(cl, "step", "setpoint", time = 0, after = 1)
+sim_add_block(cl, "zero_order_hold", "sensor", period = 0.02)
+sim_add_block(cl, "subtract", "error")
+sim_add_block(cl, "gain", "K", gain = sim_param("K"))
+sim_add_block(cl, "zero_order_hold", "controller", period = 0.01)
+sim_add_block(cl, "transfer_function", "plant", num = 1, den = c(0.5, 1))
+# supervisor at 10 Hz: clamp the command
+sim_add_block(cl, "saturation", "limit", lower = -1.5, upper = 1.5)
+sim_add_block(cl, "zero_order_hold", "supervisor", period = 0.1)
+sim_connect(cl, "plant", "sensor")
+sim_connect(cl, "setpoint", "error", input = 1)
+sim_connect(cl, "sensor", "error", input = 2)
+sim_connect(cl, "error", "K")
+sim_connect(cl, "K", "controller")
+sim_connect(cl, "controller", "limit")
+sim_connect(cl, "limit", "supervisor")
+sim_connect(cl, "supervisor", "plant")
+p <- sim_compile(cl)
+p$rates$table
+#>            period offset     blocks
+#> controller   0.01      0 controller
+#> sensor       0.02      0     sensor
+#> supervisor   0.10      0 supervisor
+r <- sim_run(p, c(0, 2))
+plot(r, c("plant", "controller", "supervisor"))
+```
+
+![](multirate_files/figure-html/unnamed-chunk-5-1.png)
+
+The command applied to the plant changes only every 100 ms, the
+controller output every 10 ms, and the plant output varies continuously.
