@@ -128,6 +128,14 @@ The list returned by `build(p)` may contain:
   sizes. The integrator restarts exactly at each kink; nothing is
   logged. They are ignored by methods without root finding.
 
+- `nonfinite_ok`: indices into `d` of discrete states that may hold
+  `-Inf` (a "not yet" sentinel such as the entry time of a state machine
+  before its first hit). All other values must stay finite.
+
+Outputs, `update`, `on_zc` and resets must return finite numbers (except
+the `nonfinite_ok` states); `NA`, `NaN` or an infinite value fails the
+run with a message naming the block.
+
 All functions must be free of side effects: the solver calls them at
 trial points that it may later reject.
 

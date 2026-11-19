@@ -117,5 +117,5 @@ sim_connect(m, "mx", "rate")
 sim_connect(m, "rate", "temp")
 r <- sim_run(sim_compile(m), c(0, 10))
 range(sim_signal(r, "temp"))
-#> [1] 18.00000 21.02948
+#> [1] 18.00000 21.02953
 ```

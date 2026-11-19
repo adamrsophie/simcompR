@@ -83,10 +83,10 @@ for (i in 1:4) { exact <- c(exact, tail(exact, 1) + 2 * v / g); v <- 0.8 * v }
 cbind(simulated = sim_events(r)$time[1:5], exact, error = sim_events(r)$time[1:5] - exact)
 #>      simulated     exact        error
 #> [1,] 0.6385509 0.6385509 7.660539e-15
-#> [2,] 1.6602322 1.6602322 1.976197e-14
-#> [3,] 2.4775773 2.4775773 2.753353e-14
-#> [4,] 3.1314534 3.1314534 6.483702e-14
-#> [5,] 3.6545543 3.6545543 1.163514e-13
+#> [2,] 1.6602322 1.6602322 3.108624e-14
+#> [3,] 2.4775773 2.4775773 5.684342e-14
+#> [4,] 3.1314534 3.1314534 8.260059e-14
+#> [5,] 3.6545543 3.6545543 1.039169e-13
 ```
 
 The differences are event-location errors of the root finder, controlled
@@ -118,7 +118,7 @@ z <- suppressWarnings(sim_run(sim_compile(ball), c(0, 20), max_events = 30))
 z$status
 #> [1] "event_limit"
 z$message
-#> [1] "reached max_events = 30 at t = 5.739051; the model may be chattering or Zeno"
+#> [1] "reached max_events = 30 at t = 5.739052; the model may be chattering or Zeno"
 ```
 
 ## Event direction

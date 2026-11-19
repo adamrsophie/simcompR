@@ -155,7 +155,7 @@ r <- sim_run(sim_compile(ctl), c(0, 4), times = Ts * 0:20, rtol = 1e-10, atol = 
 phi <- exp(-Ts); gam <- 1 - phi
 xk <- Reduce(function(x, k) phi * x + gam * K * (1 - x), 1:20, accumulate = TRUE, 0)
 max(abs(sim_signal(r, "x") - xk))
-#> [1] 1.150335e-10
+#> [1] 1.681196e-10
 plot(sim_run(sim_compile(ctl), c(0, 4)), c("x", "u"))
 ```
 

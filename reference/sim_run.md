@@ -112,8 +112,10 @@ source (for example the time of a step). Sample hits are computed as
 `offset + k * period` with integer `k`, never by accumulating `period`,
 so they do not drift and do not depend on where the time axis starts.
 Two computed times within 16 units in the last place of the largest time
-in `tspan` are the same instant; a sample period that is not far above
-that resolution is an error.
+in `tspan` are the same instant; a sample period that is not well above
+that resolution is an error. The solver integrates each segment on time
+measured from the segment start, so continuous states keep their
+accuracy when the time axis starts far from zero.
 
 **At an instant** (a segment boundary or a located crossing) the
 simulator, in this order:

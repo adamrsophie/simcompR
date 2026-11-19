@@ -153,7 +153,7 @@ r <- sim_run(sim_compile(lm), c(0, 2 * pi), times = 2 * pi,
              rtol = 1e-10, atol = 1e-12)
 sim_signal(r, "x")   # zero over a full period
 #>            x 
-#> 1.606904e-09
+#> 2.454109e-09
 ```
 
 A block whose output switches between branches keeps the branch in a

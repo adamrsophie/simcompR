@@ -184,7 +184,13 @@ zeros are points where a memoryless output or its slope jumps (the
 corners of a saturation), and their number for the given input sizes.
 The integrator restarts exactly at each kink; nothing is logged. They
 are ignored by methods without root finding.</p></li>
-</ul><p>All functions must be free of side effects: the solver calls them at
+<li><p><code>nonfinite_ok</code>: indices into <code>d</code> of discrete states that may hold
+<code>-Inf</code> (a "not yet" sentinel such as the entry time of a state machine
+before its first hit). All other values must stay finite.</p></li>
+</ul><p>Outputs, <code>update</code>, <code>on_zc</code> and resets must return
+finite numbers (except the <code>nonfinite_ok</code> states); <code>NA</code>, <code>NaN</code> or an
+infinite value fails the run with a message naming the block.</p>
+<p>All functions must be free of side effects: the solver calls them at
 trial points that it may later reject.</p>
     </div>
 

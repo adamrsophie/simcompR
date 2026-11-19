@@ -210,10 +210,10 @@ in closed form: <span class="math inline">t_1 = \sqrt{2h_0/g}</span> and
 <span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span>simulated <span class="op">=</span> <span class="fu"><a href="../reference/sim_signal.html">sim_events</a></span><span class="op">(</span><span class="va">r</span><span class="op">)</span><span class="op">$</span><span class="va">time</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">5</span><span class="op">]</span>, <span class="va">exact</span>, error <span class="op">=</span> <span class="fu"><a href="../reference/sim_signal.html">sim_events</a></span><span class="op">(</span><span class="va">r</span><span class="op">)</span><span class="op">$</span><span class="va">time</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">5</span><span class="op">]</span> <span class="op">-</span> <span class="va">exact</span><span class="op">)</span></span>
 <span><span class="co">#&gt;      simulated     exact        error</span></span>
 <span><span class="co">#&gt; [1,] 0.6385509 0.6385509 7.660539e-15</span></span>
-<span><span class="co">#&gt; [2,] 1.6602322 1.6602322 1.976197e-14</span></span>
-<span><span class="co">#&gt; [3,] 2.4775773 2.4775773 2.753353e-14</span></span>
-<span><span class="co">#&gt; [4,] 3.1314534 3.1314534 6.483702e-14</span></span>
-<span><span class="co">#&gt; [5,] 3.6545543 3.6545543 1.163514e-13</span></span></code></pre></div>
+<span><span class="co">#&gt; [2,] 1.6602322 1.6602322 3.108624e-14</span></span>
+<span><span class="co">#&gt; [3,] 2.4775773 2.4775773 5.684342e-14</span></span>
+<span><span class="co">#&gt; [4,] 3.1314534 3.1314534 8.260059e-14</span></span>
+<span><span class="co">#&gt; [5,] 3.6545543 3.6545543 1.039169e-13</span></span></code></pre></div>
 <p>The differences are event-location errors of the root finder,
 controlled by the tolerances; the physical model itself (free fall plus
 the restitution rule) is exact.</p>
@@ -239,7 +239,7 @@ wrong answer:</p>
 <span><span class="va">z</span><span class="op">$</span><span class="va">status</span></span>
 <span><span class="co">#&gt; [1] "event_limit"</span></span>
 <span><span class="va">z</span><span class="op">$</span><span class="va">message</span></span>
-<span><span class="co">#&gt; [1] "reached max_events = 30 at t = 5.739051; the model may be chattering or Zeno"</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] "reached max_events = 30 at t = 5.739052; the model may be chattering or Zeno"</span></span></code></pre></div>
 </div>
 </div>
 <div class="section level2">
