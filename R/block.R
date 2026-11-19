@@ -39,7 +39,11 @@
 #' * `zc(t, x, d, u)` and `on_zc(i, direction, t, x, d, u)`: zero-crossing
 #'   functions and their handler, which returns `list(d = , x = , terminal = )`.
 #'   `zc_direction` gives one of `"rising"`, `"falling"`, `"either"` per
-#'   component.
+#'   component. The lengths of `d` and `x` must match the block's states.
+#' * `on_rest(i, t, x, d, u)`: optional; called when crossing function `i`
+#'   sits on its level and stays there (a plateau), returning `list(d = )`
+#'   for the mode on the plateau. The `switch` block uses it to apply its
+#'   criterion at equality.
 #' * `breakpoints(t0, tf)`: times where the block's output is
 #'   discontinuous; the integrator restarts there.
 #' * `modes(t, x, d, u)`: for switching blocks whose output branch is
@@ -216,7 +220,12 @@ sim_param_expr <- function(expr) {
   structure(list(name = NULL, expr = expr, vars = vars), class = "sim_param")
 }
 
-param_text <- function(v) if (is.null(v$expr)) v$name else paste0("(", v$expr, ")")
+# Text of a parameter inside a larger expression: a name (quoted with
+# backticks when not syntactic) or a parenthesized expression, so the
+# grouping of R arithmetic is kept.
+param_text <- function(v) {
+  if (is.null(v$expr)) deparse(as.name(v$name), backtick = TRUE) else paste0("(", v$expr, ")")
+}
 
 #' @export
 Ops.sim_param <- function(e1, e2) {
@@ -225,7 +234,7 @@ Ops.sim_param <- function(e1, e2) {
   }
   txt <- function(v) {
     if (is_param_ref(v)) return(param_text(v))
-    if (is.numeric(v) && length(v) == 1L && is.finite(v)) return(sprintf("%.17g", v))
+    if (is.numeric(v) && length(v) == 1L && is.finite(v)) return(paste0("(", num_str(v), ")"))
     sim_abort("Arithmetic on sim_param() takes parameters and single finite numbers.")
   }
   sim_param_expr(if (missing(e2)) paste0(.Generic, txt(e1)) else

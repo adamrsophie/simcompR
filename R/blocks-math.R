@@ -262,7 +262,7 @@ register_math_blocks <- function() {
         scope <- p$.scope %||% list()
         f <- function(t, v) as.numeric(eval_safe(e, c(scope, list(u = v, t = t))))
         size <- p$size
-        list(inputs = NA, outputs = if (is.na(size)) NA else as.integer(size),
+        list(inputs = NA, outputs = size,
              feedthrough = TRUE,
              size_out = function(n) length(f(0, numeric(n))),
              output = function(t, x, d, u) f(t, u[[1]]))
@@ -275,7 +275,7 @@ register_math_blocks <- function() {
         f <- p$fun
         if (!is.function(f)) sim_abort("`fun` must be a function(u, t).")
         size <- p$size
-        list(inputs = NA, outputs = if (is.na(size)) NA else as.integer(size),
+        list(inputs = NA, outputs = size,
              feedthrough = TRUE,
              size_out = function(n) length(f(numeric(n), 0)),
              output = function(t, x, d, u) as.numeric(f(u[[1]], t)))

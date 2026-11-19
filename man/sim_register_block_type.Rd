@@ -75,7 +75,11 @@ given to \code{\link[=sim_run]{sim_run()}}).
 \item \code{zc(t, x, d, u)} and \code{on_zc(i, direction, t, x, d, u)}: zero-crossing
 functions and their handler, which returns \code{list(d = , x = , terminal = )}.
 \code{zc_direction} gives one of \code{"rising"}, \code{"falling"}, \code{"either"} per
-component.
+component. The lengths of \code{d} and \code{x} must match the block's states.
+\item \code{on_rest(i, t, x, d, u)}: optional; called when crossing function \code{i}
+sits on its level and stays there (a plateau), returning \code{list(d = )}
+for the mode on the plateau. The \code{switch} block uses it to apply its
+criterion at equality.
 \item \code{breakpoints(t0, tf)}: times where the block's output is
 discontinuous; the integrator restarts there.
 \item \code{modes(t, x, d, u)}: for switching blocks whose output branch is

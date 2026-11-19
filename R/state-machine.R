@@ -259,15 +259,17 @@ register_state_machine_block <- function() {
       nin <- p$n_inputs
       if (!is_count(nin)) sim_abort("`n_inputs` must be a positive integer.")
       nvar <- length(data0)
+      per <- check_number(p$period, "`period`")
       # outgoing transitions of each state, already in priority order
       by_state <- lapply(seq_along(states), function(s) Filter(function(tr) tr$from == s, trs))
       run <- function(s, entered, data, u, t) {
         v <- unlist(u, use.names = FALSE)
-        elapsed <- t - entered
-        # only the rounding of t - entered is forgiven, never a fraction of t
-        slack <- 8 * .Machine$double.eps * max(1, abs(t), abs(entered))
+        # time in the state counted in whole clock periods: hits are a whole
+        # number of periods apart, so the rounding of large times cannot
+        # move a transition to another hit
+        held_for <- if (per > 0) round((t - entered) / per) * per else t - entered
         for (tr in by_state[[s]]) {
-          if (elapsed < tr$after - slack) next
+          if (held_for < tr$after * (1 - 4 * .Machine$double.eps)) next
           if (!tr$guard(v, t, t - entered, data)) next
           if (!is.null(acts$exit[[s]])) data <- acts$exit[[s]](data, v, t)
           if (!is.null(tr$action)) data <- tr$action(data, v, t)

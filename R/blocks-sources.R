@@ -98,11 +98,15 @@ register_source_blocks <- function() {
         del <- check_number(p$delay, "`delay`")
         if (per <= 0) sim_abort("`period` must be positive.")
         if (w <= 0 || w >= 1) sim_abort("`width` must be in (0, 1), a fraction of the period.")
+        unresolved <- paste0("the pulse edges are closer than the resolution of double ",
+                             "precision at these times; shorten the time origin or ",
+                             "lengthen the period.")
         list(outputs = 1L,
              output = function(t, x, d, u) {
                if (t < del) return(0)
                # compare with the breakpoint times exactly as they are computed
                k <- floor((t - del) / per)
+               if (k + 1 == k) sim_abort(unresolved)
                while (del + (k + 1) * per <= t) k <- k + 1
                while (k > 0 && del + k * per > t) k <- k - 1
                if (t < del + (k + w) * per) a else 0
@@ -113,8 +117,11 @@ register_source_blocks <- function() {
                lo <- max(0, floor((t0 - del) / per))
                hi <- ceiling((tf - del) / per)
                if (hi < lo) return(numeric())
+               if (hi + 1 == hi) sim_abort(unresolved)
                k <- seq.int(lo, hi)
-               c(del + k * per, del + (k + w) * per)
+               v <- c(rbind(del + k * per, del + (k + w) * per))
+               if (any(diff(v) <= 0)) sim_abort(unresolved)
+               v
              })
       })
 

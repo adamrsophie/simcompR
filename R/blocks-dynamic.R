@@ -132,7 +132,7 @@ register_dynamic_blocks <- function() {
           sim_abort("`n_inputs` must be 0 or 1.")
         }
         uin <- function(u) if (nin) u[[1]] else numeric()
-        list(inputs = rep(NA, nin), outputs = if (is.na(size)) NA else as.integer(size),
+        list(inputs = rep(NA, nin), outputs = size,
              feedthrough = rep(ft, nin), nx = length(x0), x0 = x0,
              size_out = function(n) length(g(0, x0, numeric(if (length(n)) n[[1]] else 0L))),
              output = function(t, x, d, u) as.numeric(g(t, x, uin(u))),

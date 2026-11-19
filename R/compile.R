@@ -205,9 +205,12 @@ compile_flat <- function(flat, params, opts, previous = NULL) {
     signal_of[[a]] <- signal_of[[flat$aliases[[a]]]]
   }
   for (b in blocks) {
-    if (b$type == "scope" && is.null(signal_of[[b$name]])) {
-      signal_of[[b$name]] <- unlist(b$in_idx)
+    if (b$type != "scope") next
+    if (!is.null(signal_of[[b$name]])) {
+      sim_abort("Signal name '", b$name, "' is used twice: it names scope '", b$name,
+                "' and another signal; rename one of them.")
     }
+    signal_of[[b$name]] <- unlist(b$in_idx)
   }
 
   schedule <- lapply(comps, function(cmp) {
@@ -269,6 +272,7 @@ propagate_sizes <- function(defs, src, bnames) {
   nb <- length(defs)
   ins <- lapply(defs, `[[`, "inputs")
   outs <- lapply(defs, `[[`, "outputs")
+  declared <- lapply(outs, function(o) !is.na(o))
   partial <- FALSE
   notes <- character()
   # visit blocks in the order sizes flow along connections, so a chain is
@@ -285,7 +289,14 @@ propagate_sizes <- function(defs, src, bnames) {
     for (i in visit) {
       for (j in seq_along(ins[[i]])) {
         s <- outs[[src[[i]][j, 1]]][src[[i]][j, 2]]
-        if (is.na(s)) next
+        if (is.na(s)) {
+          # a consumer that needs a known size fixes its producer's port
+          if (!is.na(ins[[i]][j])) {
+            outs[[src[[i]][j, 1]]][src[[i]][j, 2]] <- ins[[i]][j]
+            changed <- TRUE
+          }
+          next
+        }
         if (is.na(ins[[i]][j])) {
           ins[[i]][j] <- s
           changed <- TRUE
@@ -350,9 +361,12 @@ propagate_sizes <- function(defs, src, bnames) {
   # input sizes; report a clear error instead of failing at run time.
   for (i in seq_len(nb)) {
     f <- defs[[i]]$size_out
-    if (!is.function(f)) next
+    # declared sizes are not inferred and are checked at run time instead
+    if (!is.function(f) || all(declared[[i]])) next
     final <- tryCatch(suppressWarnings(as.integer(f(ins[[i]]))), error = function(e) NULL)
-    if (!is.null(final) && length(final) == length(outs[[i]]) && any(final != outs[[i]])) {
+    inf <- !declared[[i]]
+    if (!is.null(final) && length(final) == length(outs[[i]]) &&
+        any(final[inf] != outs[[i]][inf])) {
       sim_abort("Block '", bnames[i], "': output size inferred inside a feedback loop (",
                 paste(outs[[i]], collapse = ", "), ") does not match its final input sizes (",
                 paste(final, collapse = ", "), "). Declare the sizes, for example with a ",
@@ -516,7 +530,7 @@ compile_events <- function(events, blocks, layout, params, zc_offset) {
            idx = if (kind == "x") b$x_idx else b$d_idx, fun = fun)
     })
     list(name = e$name, trigger = tr, resets = resets, terminal = e$terminal,
-         priority = e$priority)
+         priority = e$priority, prefix = e$prefix %||% "")
   })
   ord <- order(vapply(out, `[[`, 0, "priority"), vapply(out, `[[`, "", "name"),
                method = "radix")
@@ -688,6 +702,10 @@ set_held0 <- function(b, d0, held) {
     if (length(v) != n) {
       sim_abort("Block '", b$name, "': initial held output has length ",
                 length(v), ", expected ", n, ".")
+    }
+    if (!all(is.finite(v))) {
+      sim_abort("Block '", b$name, "': initial held output ", j,
+                " must be finite, not ", deparse_short(v), ".")
     }
     held[b$out_idx[[j]]] <- v
   }

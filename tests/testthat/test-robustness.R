@@ -366,3 +366,91 @@ test_that("solver statistics report Jacobians for ODEPACK solvers only", {
   expect_gt(r$diagnostics$stats[["jacobians"]], 0)
   expect_true(is.na(sim_run(p, c(0, 1), times = c(0, 1), method = "rk4")$diagnostics$stats[["jacobians"]]))
 })
+
+test_that("held outputs, handler resets and size parameters are validated", {
+  sim_register_block_type("test_inf_hold", function(p) list(
+    outputs = 1, sample = c(1, 0.5), held0 = function(size) Inf,
+    output = function(t, x, d, u) 1), overwrite = TRUE)
+  m <- sim_model()
+  sim_add_block(m, "test_inf_hold", "h")
+  expect_error(sim_compile(m), "must be finite")
+
+  sim_register_block_type("test_short_reset", overwrite = TRUE, build = function(p) list(
+    x0 = c(1, 2), outputs = 2, output = function(t, x, d, u) x,
+    deriv = function(t, x, d, u) c(0, 0), zc = function(t, x, d, u) t - 0.5,
+    on_zc = function(i, direction, t, x, d, u) list(x = 7)))
+  m <- sim_model()
+  sim_add_block(m, "test_short_reset", "x")
+  expect_error(sim_run(sim_compile(m), c(0, 1)), "expected 2")
+
+  m <- sim_model()
+  sim_add_block(m, "constant", "u")
+  expect_error(sim_add_block(m, "fcn", "f", size = 1.9, fun = function(u, t) u),
+               "whole numbers")
+})
+
+test_that("a state machine waits whole periods far from zero", {
+  P <- 2^-15
+  m <- sim_model()
+  sim_add_block(m, "constant", "u", value = 0)
+  sim_add_block(m, "state_machine", "sm", states = c("wait", "done"), period = P,
+                transitions = list(sim_transition("wait", "done", after = P + 2^-20)))
+  sim_connect(m, "u", "sm")
+  for (b in c(0, 1e9)) {
+    tt <- b + (0:2) * P
+    r <- sim_run(sim_compile(m), range(tt), times = tt)
+    expect_equal(unname(sim_signal(r, "sm")), c(1, 1, 2))
+  }
+})
+
+test_that("loops cut by a held output are evaluated without Newton", {
+  m <- sim_model()
+  sim_add_block(m, "zero_order_hold", "h", period = 1, offset = 0.5, initial = 2)
+  sim_add_block(m, "gain", "g")
+  sim_add_block(m, "expression", "inv", expr = "1 / u[1]")
+  sim_connect(m, "h", "g")
+  sim_connect(m, "g", "inv")
+  sim_connect(m, "inv", "h")
+  r <- sim_run(sim_compile(m, algebraic_loops = "solve"), c(0, 0.25), times = c(0, 0.25))
+  expect_equal(unname(sim_signal(r, "inv")), c(0.5, 0.5))
+
+  m <- sim_model()
+  sim_add_block(m, "discrete_integrator", "y", method = "backward", period = 1,
+                gain = 0.5, initial = 1)
+  sim_connect(m, "y", "y")
+  r <- sim_run(sim_compile(m, "solve"), 0:1, times = 0:1)
+  expect_true(all(sim_diagnostics(r)$loop_residuals[, "iterations"] > 0))
+})
+
+test_that("sizes flow back from a consumer and declared sizes are kept", {
+  m <- sim_model()
+  sim_add_block(m, "gain", "g", gain = 0.5)
+  sim_add_block(m, "integrator", "x", initial = c(0, 0))
+  sim_connect(m, "g", "g")
+  sim_connect(m, "g", "x")
+  expect_equal(sim_compile(m, "solve")$sizes$out$g, 2L)
+
+  m <- sim_model()
+  sim_add_block(m, "constant", "u", value = 1)
+  sim_add_block(m, "fcn", "f", size = 2,
+                fun = function(u, t) if (u[1] == 0) 0 else c(1, 2))
+  sim_connect(m, "u", "f")
+  expect_equal(sim_compile(m)$sizes$out$f, 2L)
+
+  m <- sim_model()
+  sim_add_block(m, "constant", "v", value = c(10, 11))
+  sim_add_block(m, "demux", "d")
+  sim_connect(m, "v", "d")
+  sim_add_block(m, "constant", "u", value = 42)
+  sim_add_block(m, "scope", "d.out1")
+  sim_connect(m, "u", "d.out1")
+  expect_error(sim_compile(m), "used twice")
+})
+
+test_that("parameter arithmetic keeps R grouping and odd names", {
+  m <- sim_model(params = list(p = 2, "a-b" = 3))
+  sim_add_block(m, "constant", "power", value = (-2)^sim_param("p"))
+  sim_add_block(m, "constant", "named", value = sim_param("a-b") + 1)
+  r <- sim_run(sim_compile(m), c(0, 1), times = 1)
+  expect_equal(unname(r$signals[1, c("power", "named")]), c(4, 4))
+})
