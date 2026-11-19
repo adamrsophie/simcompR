@@ -19,13 +19,15 @@ expand <- function(v, n) if (length(v) == n) v else rep(v, n)
 # `kinks(v)`, when given, returns the crossing functions of the input
 # vector v whose zeros are the kinks of `fun`; `per` is their number per
 # input element.
-elementwise_block <- function(fun, kinks = NULL, per = 1L) {
+elementwise_block <- function(fun, kinks = NULL, per = 1L, jumps = FALSE) {
   def <- list(inputs = NA, outputs = NA, feedthrough = TRUE,
               size_out = function(n) n,
               output = function(t, x, d, u) fun(u[[1]]))
   if (!is.null(kinks) && per > 0L) {
     def$kinks <- function(t, x, d, u) kinks(u[[1]])
     def$kink_size <- function(n) per * n[[1]]
+    # the output jumps at its kinks (one per element): the side is kept
+    def$kink_side <- jumps && per == 1L
   }
   def
 }
@@ -150,7 +152,8 @@ register_math_blocks <- function() {
           sim_abort("`fun` must be one of ", paste(names(math_functions), collapse = ", "), ".")
         }
         k <- math_kinks[[p$fun]]
-        elementwise_block(math_functions[[p$fun]], kinks = k, per = if (is.null(k)) 0L else 1L)
+        elementwise_block(math_functions[[p$fun]], kinks = k, per = if (is.null(k)) 0L else 1L,
+                          jumps = p$fun %in% c("sign", "floor", "ceiling", "round"))
       })
 
   reg("minmax", category = "math",

@@ -145,6 +145,7 @@ compile_flat <- function(flat, params, opts, previous = NULL) {
 
   # 4: sizes -----------------------------------------------------------------
   sizes <- propagate_sizes(defs, src, bnames)
+  defs <- lapply(seq_len(nb), function(i) add_kinks(defs[[i]], sizes$inputs[[i]], bnames[i]))
 
   # 5-7: dependency graph and schedule ---------------------------------------
   adj <- vector("list", nb)
@@ -184,7 +185,7 @@ compile_flat <- function(flat, params, opts, previous = NULL) {
   # 8: layouts -----------------------------------------------------------------
   layout <- layout_vectors(defs, sizes, bnames)
   blocks <- lapply(seq_len(nb), function(i) {
-    d <- add_kinks(defs[[i]], sizes$inputs[[i]], bnames[i])
+    d <- defs[[i]]
     in_idx <- lapply(seq_along(d$inputs), function(j) {
       layout$out_idx[[src[[i]][j, 1]]][[src[[i]][j, 2]]]
     })
@@ -476,6 +477,50 @@ add_kinks <- function(d, in_sizes, name) {
   d$zc_direction <- c(if (nz) d$zc_direction, rep("either", nk))
   d$zc_optional <- c(rep(FALSE, nz), rep(TRUE, nk))
   d$nzc <- nz + nk
+  if (isTRUE(d$kink_side) && !nz && nk == in_sizes[[1]]) d <- add_kink_sides(d, nk, kf)
+  d
+}
+
+# A memoryless block whose output jumps at its kinks (compare, sign, floor,
+# ceiling, round) keeps, per element, the side of the kink the input is
+# heading to: set by the direction of a located kink (or of a departure
+# from it) and cleared once the input is off the kink. On the kink the
+# output is taken just past it on that side, so the jump happens at the
+# instant itself, where switches, stop blocks and events see it.
+add_kink_sides <- function(d, nk, kf) {
+  nd0 <- d$nd
+  out0 <- d$output
+  band <- function(v) 1e-8 * (1 + abs(v))
+  sides <- function(dd) dd[nd0 + seq_len(nk)]
+  d$nd <- nd0 + nk
+  d$d0 <- c(d$d0, numeric(nk))
+  d$output <- function(t, x, dd, u) {
+    s <- sides(dd)
+    if (any(s != 0)) {
+      v <- u[[1]]
+      on <- s != 0 & abs(kf(t, x, dd, u)) <= band(v)
+      v[on] <- v[on] + s[on] * 10 * band(v[on])
+      u[[1]] <- v
+    }
+    out0(t, x, dd[seq_len(nd0)], u)
+  }
+  d$on_zc <- function(i, direction, t, x, dd, u) {
+    v <- u[[1]]
+    h <- 10 * band(v[i])
+    up <- u; up[[1]][i] <- v[i] + h
+    dn <- u; dn[[1]][i] <- v[i] - h
+    # direction of the input from the direction of the kink function
+    slope <- sign(kf(t, x, dd, up)[i] - kf(t, x, dd, dn)[i])
+    dirs <- c(rising = 1, falling = -1, either = 0)
+    out <- dd
+    out[nd0 + i] <- dirs[[direction]] * slope
+    list(silent = TRUE, d = out)
+  }
+  d$modes <- function(t, x, dd, u) {
+    s <- sides(dd)
+    s[abs(kf(t, x, dd, u)) > band(u[[1]])] <- 0
+    c(dd[seq_len(nd0)], s)
+  }
   d
 }
 

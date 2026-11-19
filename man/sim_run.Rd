@@ -32,7 +32,9 @@ taken by the integrator.}
 
 \item{method}{Integration method passed to \code{\link[deSolve:ode]{deSolve::ode()}}. Models with
 zero crossings need one of \code{"lsoda"}, \code{"lsode"}, \code{"lsodes"} or
-\code{"lsodar"}.}
+\code{"lsodar"}. The fixed-step methods \code{"euler"} and \code{"rk4"} take steps of
+at most \code{hmax}, by default \code{(tf - t0) / 1000}, shortened to end at
+every boundary and output time.}
 
 \item{rtol, atol}{Relative and absolute tolerances.}
 
@@ -57,7 +59,12 @@ chattering and Zeno behavior.}
 \item{zc_tol}{A zero-crossing function within \code{zc_tol} of zero is on its
 level: arriving there counts as a crossing, the same root is not
 located again at a restart, and leaving the level fires the event
-only in its trigger direction (step 5 above).}
+only in its trigger direction (step 5 above). Leaving means moving
+away from zero; a function that approaches zero inside the band, or
+stays on it, is watched until it leaves the band, and the event fires
+then in the direction of the side it leaves on. A function that enters
+the band without reaching zero (an asymptotic approach) is reported
+once, at the next segment boundary.}
 
 \item{on_failure}{\code{"error"} raises an error when the simulation fails;
 \code{"warn"} returns the partial result with a warning.}

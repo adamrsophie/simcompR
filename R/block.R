@@ -111,6 +111,17 @@ sim_register_block_type <- function(type, build, params = list(),
   if (!is.list(params) || (length(params) && is.null(names(params)))) {
     sim_abort("`params` must be a named list.")
   }
+  # R matches named arguments of sim_add_block() and sim_set_block_params()
+  # partially before the function body runs; two parameters that both
+  # abbreviate one of their formals would be rejected on every call
+  for (f in c("model", "type", "name", "block")) {
+    pn <- as.character(names(params))
+    pre <- pn[startsWith(rep(f, length(pn)), pn) & pn != f]
+    if (length(pre) > 1L) {
+      sim_abort("Parameters ", paste0("`", pre, "`", collapse = " and "), " both abbreviate `",
+                f, "`, an argument of sim_add_block() or sim_set_block_params(); rename one.")
+    }
+  }
   if (exists(type, envir = .registry, inherits = FALSE) && !overwrite) {
     sim_abort("Block type '", type, "' is already registered. ",
               "Use `overwrite = TRUE` to replace it.")

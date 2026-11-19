@@ -81,7 +81,9 @@ root_methods <- c("lsoda", "lsode", "lsodes", "lsodar")
 #'   taken by the integrator.
 #' @param method Integration method passed to [deSolve::ode()]. Models with
 #'   zero crossings need one of `"lsoda"`, `"lsode"`, `"lsodes"` or
-#'   `"lsodar"`.
+#'   `"lsodar"`. The fixed-step methods `"euler"` and `"rk4"` take steps of
+#'   at most `hmax`, by default `(tf - t0) / 1000`, shortened to end at
+#'   every boundary and output time.
 #' @param rtol,atol Relative and absolute tolerances.
 #' @param hmax Optional maximum step size. When the model has events or
 #'   switching blocks and `hmax` is not given, it is `(tf - t0) / 100`
@@ -99,7 +101,12 @@ root_methods <- c("lsoda", "lsode", "lsodes", "lsodar")
 #' @param zc_tol A zero-crossing function within `zc_tol` of zero is on its
 #'   level: arriving there counts as a crossing, the same root is not
 #'   located again at a restart, and leaving the level fires the event
-#'   only in its trigger direction (step 5 above).
+#'   only in its trigger direction (step 5 above). Leaving means moving
+#'   away from zero; a function that approaches zero inside the band, or
+#'   stays on it, is watched until it leaves the band, and the event fires
+#'   then in the direction of the side it leaves on. A function that enters
+#'   the band without reaching zero (an asymptotic approach) is reported
+#'   once, at the next segment boundary.
 #' @param on_failure `"error"` raises an error when the simulation fails;
 #'   `"warn"` returns the partial result with a warning.
 #' @param ... Further arguments for [deSolve::ode()].
@@ -135,6 +142,16 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
   times <- sort(unique(pmin(pmax(times, t0), tf)))
   check_number(rtol, "`rtol`"); check_number(atol, "`atol`")
   if (!is_count(max_events)) sim_abort("`max_events` must be a positive integer.")
+  if (!is_count(maxsteps)) sim_abort("`maxsteps` must be a positive integer.")
+  if (!is_scalar_number(zc_tol) || zc_tol < 0) {
+    sim_abort("`zc_tol` must be a single finite number of at least 0.")
+  }
+  if (!is.logical(include_ticks) || length(include_ticks) != 1L || is.na(include_ticks)) {
+    sim_abort("`include_ticks` must be TRUE or FALSE.")
+  }
+  if (!is.null(hmax) && (!is_scalar_number(hmax) || hmax <= 0)) {
+    sim_abort("`hmax` must be a single positive number.")
+  }
   n_event_zc <- sum(vapply(plan$events, function(e) e$trigger$kind == "zero_crossing", TRUE))
   nzc <- plan$zc$n + n_event_zc
   if (!is.character(method) || length(method) != 1L) sim_abort("`method` must be a string.")
@@ -236,6 +253,9 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
   # step (which the root finder cannot see) need a fast signal.
   if (is.null(hmax) && nzc && n_strict) hmax <- (tf - t0) / 100
   if (!is.null(hmax)) ode_args$hmax <- hmax
+  # fixed-step methods step from one requested time to the next; give them
+  # a grid of their own so results do not depend on `times`
+  fixed_step <- if (method %in% c("euler", "rk4")) hmax %||% ((tf - t0) / 1000)
   # without continuous states nothing is integrated, so kinks need no stop
   if (plan$nx == 0L && !n_strict) nzc <- 0L
   dummy <- plan$nx == 0L && nzc > 0L
@@ -263,11 +283,16 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
   restarts <- 0L
   stuck <- 0L
   resting <- logical(nzc)  # functions on their level that the probe saw stay
+  depart <- numeric(nzc)   # and the direction of those it saw leave
   root <- NULL     # crossings located by the solver at t
   g_end <- NULL    # crossing functions at the left limit of t
   g_seg0 <- NULL   # and at the start of the segment that ended at t
   zc_events <- Filter(function(e) e$trigger$kind == "zero_crossing", plan$events)
   strict_zc <- !optional[seq_len(plan$zc$n)]
+  # kinks of outputs that jump are probed when the input sits on them
+  for (i in plan$zc$blocks) {
+    if (isTRUE(plan$blocks[[i]]$def$kink_side)) strict_zc[plan$zc$block_idx[[i]]] <- TRUE
+  }
   d_inf_ok <- nonfinite_allowed(plan)
   ode_probe <- c(list(method = method, rtol = rtol, atol = atol, maxsteps = maxsteps), ode_args)
   ode_probe$hmax <- NULL
@@ -353,6 +378,14 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
       r <- b$def$on_zc(j, dir, t, x[b$x_idx], d[b$d_idx], block_inputs(b, sig))
       if (isTRUE(r$silent)) {
         out$silent <<- TRUE
+        # a kink may move the side a jumping output is on: not an event,
+        # but what it carries across a level is
+        if (!is.null(r$d) && !identical(as.numeric(r$d), d[b$d_idx])) {
+          g_a <- g_here()
+          d[b$d_idx] <<- r$d
+          add_crossings(g_a, g_here())
+          return(TRUE)
+        }
         return(FALSE)
       }
       xn <- x; dn <- d
@@ -394,6 +427,8 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
       g <- zero_crossings(plan, t, x, d, sig)
       back <- NULL
       dir_of <- function(k) {
+        # a resting function left its band on the side it is now on
+        if (isTRUE(root$resting[k])) return(if (g[k] > 0) "rising" else "falling")
         if (abs(root$g_start[k]) > zc_tol) return(if (root$g_start[k] < 0) "rising" else "falling")
         # the function started on its level: look a short way back along
         # the trajectory, lengthening the step until the value differs (a
@@ -474,6 +509,7 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
     ev <- refresh_modes()
     # 4. and 5. cascades and departures
     resting <<- logical(nzc)
+    depart <<- numeric(nzc)
     probes <- 0L
     repeat {
       layers <- 0L
@@ -499,6 +535,7 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
         on_level[comps[hit]] <- FALSE
       }
       resting <<- logical(nzc)
+      depart <<- numeric(nzc)
       if (!any(level_any)) break
       probes <- probes + 1L
       if (probes > max_events) {
@@ -507,8 +544,15 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
       }
       dg <- departure_probe(plan, t, bounds[bi + 1L], x, d, held, ode_probe, hmax,
                             bp_at[[bi + 1L]], g)
-      resting <<- level_any & dg == 0
-      dir_of <- function(k) if (dg[k] > 0) "rising" else if (dg[k] < 0) "falling" else NA
+      # a departure moves away from the level; a function that stays on it
+      # or approaches it inside the band rests and is watched for leaving
+      away <- abs(g + dg) > abs(g)
+      resting <<- level_any & !away
+      depart <<- structure(ifelse(level_any & away, sign(dg), 0), tau = attr(dg, "h"),
+                           amp = abs(g) + abs(dg))
+      dir_of <- function(k) {
+        if (!away[k]) NA else if (dg[k] > 0) "rising" else if (dg[k] < 0) "falling" else NA
+      }
       moved <- FALSE
       # blocks whose input rests on a level take their mode for the plateau
       for (i in plan$zc$blocks) {
@@ -550,6 +594,7 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
       done <- run_events(cand)
       if (!moved && !length(done)) break
       resting <<- logical(nzc)
+      depart <<- numeric(nzc)
       ev <- refresh_modes()
     }
     for (b in plan$blocks) {
@@ -578,7 +623,8 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
         # a restart at a kink; guard against restarts that do not advance
         stuck <- stuck + 1L
         if (stuck > 100L) {
-          failed(paste0("restarts at kinks do not advance at t = ", format(t)))
+          failed(paste0("restarts at kinks do not advance at t = ", format(t),
+                        "; the model may be chattering at a kink (a sliding mode)"))
           break
         }
       } else {
@@ -617,7 +663,8 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
 
     seg <- integrate_segment(plan, t, tn, inner, x, d, held, dummy, method,
                              rtol, atol, maxsteps, zc_tol, nzc, ode_args, tol,
-                             left = bp_at[[bi + 1L]], resting = resting)
+                             left = bp_at[[bi + 1L]], resting = resting, depart = depart,
+                             fixed_step = fixed_step)
     stats_acc <- add_stats(stats_acc, seg$stats)
     warnings <- unique(c(warnings, seg$warnings))
     for (k in seq_along(seg$times)) add_row(seg$times[k], seg$x[k, ], d, held, "sample")
@@ -634,9 +681,12 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
       next
     }
     tr <- seg$root$time
-    if (abs(tr - t) > tol) stuck <- 0L
+    # restarts at kinks that advance by less than about 1e-8 of the time
+    # scale are chattering (a sliding mode); counted below
+    if (tr - t > sqrt(.Machine$double.eps) * max(1, abs(t))) stuck <- 0L
     x <- seg$root$x
-    root <- list(which = seg$root$which, g_start = seg$g_start, t_start = t)
+    root <- list(which = seg$root$which, g_start = seg$g_start, t_start = t,
+                 resting = resting)
     if (abs(tr - tn) <= tol) {
       # the root and the boundary are one instant; carry the states over
       # the (at most tol) gap so the boundary row is consistent with its time
@@ -679,6 +729,10 @@ apply_initial <- function(plan, initial, x, d) {
   if (!is.list(initial) || is.null(names(initial))) {
     sim_abort("`initial` must be a named list keyed by block name.")
   }
+  if (anyDuplicated(names(initial))) {
+    sim_abort("`initial` names block '", names(initial)[anyDuplicated(names(initial))],
+              "' more than once.")
+  }
   for (nm in names(initial)) {
     b <- plan$blocks[[nm]]
     if (is.null(b)) sim_abort("`initial`: unknown block '", nm, "'.")
@@ -698,7 +752,8 @@ apply_initial <- function(plan, initial, x, d) {
 
 integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
                               rtol, atol, maxsteps, zc_tol, nzc, ode_args, tol,
-                              left = integer(), resting = logical()) {
+                              left = integer(), resting = logical(), depart = numeric(),
+                              fixed_step = NULL) {
   y0 <- if (dummy) 0 else x
   xs <- function(y) if (dummy) numeric() else y
   # Inside a segment, sources with breakpoints take their left limit at the
@@ -712,12 +767,24 @@ integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
   L <- tn - t
   at <- function(tau) if (tau >= L) tn else t + tau
   signals_at <- function(tau, y) evaluate(plan, at(tau), xs(y), d, held, t_left = t_left, left = left)$sig
+  tau_fail <- NA_real_
   func <- function(tau, y, parms) {
-    sig <- signals_at(tau, y)
-    list(if (dummy) 0 else derivatives(plan, at(tau), y, d, sig))
+    tryCatch({
+      sig <- signals_at(tau, y)
+      list(if (dummy) 0 else derivatives(plan, at(tau), y, d, sig))
+    }, error = function(e) {
+      # remember the earliest time a block failed at
+      if (is.na(tau_fail) || tau < tau_fail) tau_fail <<- tau
+      stop(e)
+    })
   }
   inner_local <- inner - t
-  args <- c(list(y = y0, times = c(0, inner_local, L), func = func, parms = NULL,
+  grid <- numeric()
+  if (!is.null(fixed_step)) {
+    n <- ceiling(L / fixed_step * (1 - 1e-12))
+    if (n > 1L) grid <- L * seq_len(n - 1L) / n
+  }
+  args <- c(list(y = y0, times = sort(unique(c(0, inner_local, grid, L))), func = func, parms = NULL,
                  method = method, rtol = rtol, atol = atol, maxsteps = maxsteps,
                  tcrit = L),
             ode_args)
@@ -725,20 +792,34 @@ integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
   if (nzc) {
     g0 <- zero_crossings(plan, t, x, d, evaluate(plan, t, x, d, held)$sig)
     if (length(resting) != length(g0)) resting <- logical(length(g0))
+    if (length(depart) != length(g0)) depart <- numeric(length(g0))
+    dep <- depart != 0 & !resting
     at0 <- abs(g0) <= zc_tol & !resting
     off <- ifelse(at0, g0, 0)
     args$rootfunc <- function(tau, y, parms) {
       xx <- xs(y)
-      v <- zero_crossings(plan, at(tau), xx, d, signals_at(tau, y)) - off
+      g <- zero_crossings(plan, at(tau), xx, d, signals_at(tau, y))
+      v <- g - off
       # A function that starts at zero and stays exactly there (a constant
       # signal sitting on its threshold) would make the root finder stop with
       # "root too near the initial point". Past the start, report an exact
       # zero as positive; at the start itself keep the zero, so the root
       # finder takes its reference sign from the first step.
-      if (tau > 0) v[at0 & v == 0] <- 1
+      if (tau > 0) v[at0 & !dep & v == 0] <- 1
+      # a function seen leaving its level keeps the sign it leaves with
+      # until it comes back across the band
+      # (an offset that fades out over the time the probe needed to see the
+      # move, so the root finder starts from a definite sign and the level
+      # itself is located exactly later on)
+      if (any(dep)) {
+        w <- pmax(0, 1 - tau / attr(depart, "tau")[dep])
+        v[dep] <- g[dep] + depart[dep] * attr(depart, "amp")[dep] * w
+      }
       # a function resting on its level is watched for leaving it in
       # either direction: |g| grows past zc_tol
       if (any(resting)) v[resting] <- abs(v[resting]) - zc_tol
+      # a function seen leaving its level keeps the sign it leaves with
+      # until it comes back across the band
       v
     }
   }
@@ -750,8 +831,25 @@ integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
     invokeRestart("muffleWarning")
   }), error = function(e) e)
   if (inherits(out, "error")) {
-    empty$error <- paste0("in [", format(t), ", ", format(tn), "]: ",
-                          sub("[.]+$", "", conditionMessage(out)))
+    msg <- sub("[.]+$", "", conditionMessage(out))
+    ok <- inner[inner - t < tau_fail]
+    if (!is.na(tau_fail) && length(ok)) {
+      # keep the output times reached before the failure: integrate again
+      # up to the last of them (which may also find an earlier event)
+      te <- max(ok)
+      res <- integrate_segment(plan, t, te, ok[ok < te], x, d, held, dummy, method,
+                               rtol, atol, maxsteps, zc_tol, nzc, ode_args, tol,
+                               left = integer(), resting = resting, depart = depart,
+                               fixed_step = fixed_step)
+      if (!is.null(res$root) || !is.null(res$error)) return(res)
+      res$times <- c(res$times, te)
+      res$x <- rbind(res$x, res$x_end)
+      res$error <- paste0("at t = ", format(at(tau_fail)), ": ", msg)
+      res$warnings <- unique(c(res$warnings, warns))
+      return(res)
+    }
+    empty$error <- paste0(if (is.na(tau_fail)) paste0("in [", format(t), ", ", format(tn), "]")
+                          else paste0("at t = ", format(at(tau_fail))), ": ", msg)
     empty$warnings <- warns
     return(empty)
   }
@@ -820,7 +918,9 @@ integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
 cross_direction <- function(a, b, zc_tol) {
   sa <- if (abs(a) > zc_tol) sign(a) else 0
   sb <- if (abs(b) > zc_tol) sign(b) else 0
-  if (sa == 0 || sb == sa) return(NA_character_)
+  if (sb == sa) return(NA_character_)
+  # leaving the level by a jump departs in the direction of the jump
+  if (sa == 0) return(if (sb > 0) "rising" else "falling")
   if (sb == 0) return(if (sa < 0) "rising" else "falling")
   if (sb > 0) "rising" else "falling"
 }
@@ -878,20 +978,23 @@ departure_probe <- function(plan, t, tn, x, d, held, ode_args, hmax, left, g) {
     out <- suppressWarnings(do.call(deSolve::ode, c(list(y = x, times = c(0, hs), func = func,
                                                           parms = NULL), ode_args)))
     if (nrow(out) < length(hs) + 1L || !all(is.finite(out[, -1L]))) {
-      sim_abort("the departure probe failed.")
+      sim_abort("the integration just after this instant failed; the model may be ",
+                "chattering at a discontinuity (a sliding mode).")
     }
     xs <- out[-1L, -1L, drop = FALSE]
   }
   dg <- numeric(length(g))
+  h_seen <- numeric(length(g))
   for (i in seq_along(hs)) {
     th <- t + hs[i]
     gi <- zero_crossings(plan, th, xs[i, ], d,
                          evaluate(plan, th, xs[i, ], d, held, t_left = t_left, left = left)$sig)
     todo <- dg == 0 & gi != g
     dg[todo] <- (gi - g)[todo]
+    h_seen[todo] <- hs[i]
     if (all(dg != 0)) break
   }
-  dg
+  structure(dg, h = h_seen)
 }
 
 # Discrete states that may hold -Inf: those a block declares with

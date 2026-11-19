@@ -72,7 +72,10 @@ sim_monte_carlo <- function(x, n, sampler, seed, tspan, times = NULL,
   plan <- if (inherits(x, "sim_model")) sim_compile(x) else check_plan(x)
   if (!is_count(n)) sim_abort("`n` must be a positive integer.")
   if (!is.function(sampler)) sim_abort("`sampler` must be a function of the run index.")
-  if (!is_scalar_number(seed)) sim_abort("`seed` must be a number.")
+  if (!is_scalar_number(seed) || seed != round(seed) || abs(seed) > .Machine$integer.max) {
+    sim_abort("`seed` must be a whole number in the integer range; set.seed() would ",
+              "otherwise give distinct seeds the same stream.")
+  }
   if (RNGkind()[2] == "Box-Muller") {
     sim_warn("normal.kind is \"Box-Muller\": its cached deviate cannot be restored, ",
              "so the next normal draw after sim_monte_carlo() differs from an ",
