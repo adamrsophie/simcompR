@@ -137,10 +137,24 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
 
   # Timeline: boundaries, sample hits and scheduled events ---------------
   rates <- plan$rates
+  small <- rates$period <= 64 * tol
+  if (any(small)) {
+    sim_abort("Sample period ", format(rates$period[small][1]), " is too short to be ",
+              "resolved at times near ", format(max(abs(tspan))), " in double precision; ",
+              "shift the time axis closer to zero or use a longer period.")
+  }
+  # Hit k of a rate is offset + k * period. The first and last indices are
+  # adjusted by one where rounding of (t - offset) / period would drop a hit
+  # at t0 or tf, or add one outside [t0, tf].
   ticks <- lapply(seq_along(rates$period), function(r) {
     P <- rates$period[r]; o <- rates$offset[r]
-    k <- seq.int(ceiling((t0 - o) / P - 1e-9), floor((tf - o) / P + 1e-9))
-    o + k * P
+    lo <- ceiling((t0 - o) / P); hi <- floor((tf - o) / P)
+    if (o + (lo - 1) * P >= t0 - tol) lo <- lo - 1
+    if (o + lo * P < t0 - tol) lo <- lo + 1
+    if (o + (hi + 1) * P <= tf + tol) hi <- hi + 1
+    if (o + hi * P > tf + tol) hi <- hi - 1
+    if (hi < lo) return(numeric())
+    o + seq.int(lo, hi) * P
   })
   sched <- Filter(function(e) e$trigger$kind == "scheduled", plan$events)
   outside <- vapply(sched, function(e) any(e$trigger$times < t0 - tol | e$trigger$times > tf + tol), TRUE)
@@ -338,7 +352,7 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
     }
 
     seg <- integrate_segment(plan, t, tn, inner, x, d, held, dummy, method,
-                             rtol, atol, maxsteps, zc_tol, nzc, ode_args)
+                             rtol, atol, maxsteps, zc_tol, nzc, ode_args, tol)
     stats_acc <- stats_acc + seg$stats
     warnings <- unique(c(warnings, seg$warnings))
     for (k in seq_along(seg$times)) add_row(seg$times[k], seg$x[k, ], d, held, "sample")
@@ -448,7 +462,7 @@ apply_initial <- function(plan, initial, x, d) {
 }
 
 integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
-                              rtol, atol, maxsteps, zc_tol, nzc, ode_args) {
+                              rtol, atol, maxsteps, zc_tol, nzc, ode_args, tol) {
   y0 <- if (dummy) 0 else x
   xs <- function(y) if (dummy) numeric() else y
   # Inside a segment, sources with breakpoints take their left limit at the
@@ -516,7 +530,7 @@ integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
     return(res)
   }
   flag <- ist[1] %||% 2
-  if (!is_root && (flag < 0 || abs(tt[last] - tn) > 1e-9 * max(1, abs(tn)))) {
+  if (!is_root && (flag < 0 || abs(tt[last] - tn) > tol)) {
     res$error <- paste0("the integrator stopped at t = ", format(tt[last]),
                         " before reaching ", format(tn), " (deSolve istate ", flag, ")")
     return(res)

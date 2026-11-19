@@ -58,11 +58,14 @@ check_sample_time <- function(period, offset, what) {
   c(period = as.numeric(period), offset = as.numeric(offset))
 }
 
-# Absolute time tolerance used to merge clock hits and boundaries.
-# About 4500 units in the last place: far above the rounding error of
-# offset + k * period, far below any meaningful time step.
+# Absolute time tolerance used to decide that two computed times are the
+# same instant: 16 units in the last place of the largest time in the run.
+# offset + k * period and the breakpoints of sources are within a few units
+# of the exact value, so equal instants meet; distinct sample hits are a
+# whole period apart, and sim_run() refuses periods that are not far above
+# this tolerance, so distinct hits are never merged.
 time_tol <- function(tspan) {
-  1e-12 * max(1, abs(tspan))
+  16 * .Machine$double.eps * max(1, abs(tspan))
 }
 
 # R binds a named argument to a formal by partial matching when no formal

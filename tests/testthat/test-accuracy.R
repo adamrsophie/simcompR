@@ -46,3 +46,23 @@ test_that("a pulse that starts after the run creates no breakpoints", {
   expect_length(p$blocks$p$def$breakpoints(0, 1), 0L)
   expect_equal(unname(sim_signal(sim_run(p, c(0, 1), times = c(0, 1)), "p")), c(0, 0))
 })
+
+test_that("sample clocks keep every hit when the time axis is shifted", {
+  m <- sim_model()
+  sim_add_block(m, "constant", "one")
+  sim_add_block(m, "discrete_integrator", "n", gain = 1000, period = 0.001)
+  sim_add_block(m, "discrete_integrator", "q", gain = 1, period = 0.01, offset = 0.005)
+  sim_connect(m, "one", "n")
+  sim_connect(m, "one", "q")
+  p <- sim_compile(m)
+  run <- function(t0) sim_run(p, t0 + c(0, 1), times = t0 + c(0, 1), include_ticks = FALSE)
+  ref <- run(0)
+  expect_equal(unname(sim_signal(ref, "n"))[2], 1000)
+  for (t0 in c(1e6, 1e9)) {
+    r <- run(t0)
+    expect_equal(max(r$time) - t0, 1, info = format(t0))
+    expect_equal(sim_signal(r, c("n", "q")), sim_signal(ref, c("n", "q")), info = format(t0))
+    expect_equal(sim_discrete_states(r), sim_discrete_states(ref), info = format(t0))
+  }
+  expect_error(sim_run(p, 1e11 + c(0, 1)), "too short to be resolved")
+})
