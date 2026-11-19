@@ -108,8 +108,12 @@ register_source_blocks <- function() {
                if (t < del + (k + w) * per) a else 0
              },
              breakpoints = function(t0, tf) {
-               k <- seq.int(max(0, floor((t0 - del) / per)),
-                            ceiling((tf - del) / per))
+               # only the periods that overlap [t0, tf]; none when the pulse
+               # starts after the run ends
+               lo <- max(0, floor((t0 - del) / per))
+               hi <- ceiling((tf - del) / per)
+               if (hi < lo) return(numeric())
+               k <- seq.int(lo, hi)
                c(del + k * per, del + (k + w) * per)
              })
       })
@@ -131,14 +135,21 @@ register_source_blocks <- function() {
           sim_abort("`values` must have one entry (or matrix row) per time.")
         }
         method <- match.arg(p$method, c("linear", "constant"))
+        # a single point is a constant signal
+        if (length(tt) == 1L) {
+          v1 <- as.numeric(vals[1L, ])
+          return(list(outputs = ncol(vals), output = function(t, x, d, u) v1))
+        }
+        fs <- lapply(seq_len(ncol(vals)), function(j) {
+          stats::approxfun(tt, vals[, j], method = method, rule = 2, f = 0,
+                           ties = "ordered")
+        })
+        # Every knot is a jump (constant) or a change of slope (linear). The
+        # integrator restarts at each one, so a narrow feature between two
+        # output times is never stepped over.
         list(outputs = ncol(vals),
-             output = function(t, x, d, u) {
-               vapply(seq_len(ncol(vals)), function(j) {
-                 stats::approx(tt, vals[, j], xout = t, method = method,
-                               rule = 2, f = 0, ties = "ordered")$y
-               }, numeric(1))
-             },
-             breakpoints = function(t0, tf) if (method == "constant") tt else numeric())
+             output = function(t, x, d, u) vapply(fs, function(f) f(t), numeric(1)),
+             breakpoints = function(t0, tf) tt)
       })
 
   reg("signal_function", category = "source", portable = FALSE,
