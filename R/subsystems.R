@@ -156,6 +156,8 @@ flatten_model <- function(model, prefix = "", scopes = list(), depth = 0L) {
   conns$to <- paste0(prefix, conns$to, recycle0 = TRUE)
   events <- lapply(model$events, function(e) {
     e$name <- paste0(prefix, e$name)
+    # resets read signals by the names local to their own subsystem
+    e$prefix <- prefix
     if (e$trigger$kind == "zero_crossing") e$trigger$signal <- paste0(prefix, e$trigger$signal)
     if (length(e$reset)) names(e$reset) <- paste0(prefix, names(e$reset))
     e$scopes <- scopes
@@ -192,6 +194,8 @@ flatten_model <- function(model, prefix = "", scopes = list(), depth = 0L) {
     blocks <- c(blocks, inner$blocks)
     events <- c(events, inner$events)
     aliases <- c(aliases, inner$aliases)
+    # nested instances can be watched by their full path from this level
+    out_map <- c(out_map, inner$out_map)
     inports <- paste0(full, "/", subsystem_ports(sys, "inport"))
     outports <- paste0(full, "/", subsystem_ports(sys, "outport"))
     # the instance name refers to its outputs in results
@@ -226,5 +230,11 @@ flatten_model <- function(model, prefix = "", scopes = list(), depth = 0L) {
     tr$port <- 1L
     events[[k]]$trigger <- tr
   }
-  list(blocks = blocks, connections = conns, events = events, aliases = aliases)
+  dup <- names(events)[duplicated(names(events))]
+  if (length(dup)) {
+    sim_abort("Event name '", dup[1], "' is used twice after qualifying the events of ",
+              "subsystem instances; rename one of them.")
+  }
+  list(blocks = blocks, connections = conns, events = events, aliases = aliases,
+       out_map = out_map)
 }

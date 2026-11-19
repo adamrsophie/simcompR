@@ -67,8 +67,12 @@
 sim_add_event <- function(model, name, trigger, reset = list(),
                           terminal = FALSE, priority = 0) {
   check_model(model)
-  if (!is.character(name) || length(name) != 1L || !nzchar(name)) {
+  if (!is.character(name) || length(name) != 1L || is.na(name) || !nzchar(name)) {
     sim_abort("Event `name` must be a non-empty string.")
+  }
+  if (grepl("/", name, fixed = TRUE)) {
+    sim_abort("Event name '", name, "' must not contain '/': it separates the names ",
+              "of subsystem instances, which qualify the events inside them.")
   }
   if (name %in% names(model$events)) {
     sim_abort("Model '", model$name, "' already has an event named '", name, "'.")
@@ -82,6 +86,12 @@ sim_add_event <- function(model, name, trigger, reset = list(),
   }
   if (!is.list(reset) || (length(reset) && is.null(names(reset)))) {
     sim_abort("`reset` must be a named list of block resets.")
+  }
+  rn <- names(reset)
+  if (anyNA(rn) || any(!nzchar(rn)) || anyDuplicated(rn)) {
+    sim_abort("`reset` must name each block once; ",
+              if (anyDuplicated(rn)) paste0("'", rn[anyDuplicated(rn)], "' is repeated.")
+              else "a name is missing.")
   }
   for (b in names(reset)) {
     block_path_of(model, b, "reset target")

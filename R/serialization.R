@@ -5,11 +5,14 @@ schema_version <- 1L
 #'
 #' Models are written as versioned, declarative JSON: block types, names,
 #' parameters, connections, events and nested subsystems. Numbers are
-#' stored as strings with 17 significant digits, so they read back
-#' bit-for-bit; integer, logical and character vectors keep their type,
-#' missing values and names, and numeric matrices keep their dimensions.
-#' A value that could not be read back unchanged (an array with more than
-#' two dimensions, a matrix that is not numeric or has dimension names, a
+#' stored as strings: a short decimal where that reads back exactly on
+#' every platform, otherwise the C99 hexadecimal form (such as
+#' `"0x1.5555555555555p-2"` for 1/3), so they read back bit-for-bit;
+#' integer, logical and character vectors keep their type, missing values
+#' and names, and double and integer matrices keep their dimensions and
+#' storage type. A value that could not be read back unchanged (an array
+#' with more than two dimensions, a matrix that is not numeric or has
+#' dimension names or element names, a
 #' factor, a data frame, or any other value with a class or attributes
 #' other than names) is rejected when the model is written, instead of
 #' being saved in a different form.
@@ -125,9 +128,13 @@ sim_model_from_list <- function(x) {
     tr <- e$trigger
     trig <- if (tr$kind == "scheduled") sim_at(dec(tr$times)) else
       sim_zero_crossing(tr$signal, tr$direction, dec(tr$level), tr$port, tr$element)
-    reset <- list()
-    for (r in e$reset) reset[[r$block]] <- r$expr
-    sim_add_event(m, e$name, trig, reset = reset, terminal = isTRUE(e$terminal),
+    reset <- lapply(e$reset, `[[`, "expr")
+    names(reset) <- vapply(e$reset, function(r) as.character(r$block %||% ""), "")
+    term <- e$terminal %||% FALSE
+    if (!is.logical(term) || length(term) != 1L || is.na(term)) {
+      sim_abort("Model file: event '", e$name, "' has `terminal` that is not true or false.")
+    }
+    sim_add_event(m, e$name, trig, reset = reset, terminal = term,
                   priority = dec(e$priority))
   }
   m
@@ -147,11 +154,46 @@ decode_params <- function(x) {
   out
 }
 
+# Numbers are written as short decimals where that is exact on every
+# platform: at most 15 significant digits that read back to the same double,
+# with a magnitude where reading takes one correctly rounded division.
+# Every other finite double is written in C99 hexadecimal ("%a"), which
+# num_parse() decodes exactly, so a round trip never changes a bit.
 num_str <- function(v) {
-  out <- sprintf("%.17g", v)
+  out <- sprintf("%.15g", v)
+  a <- abs(v)
+  exact <- !is.finite(v) | v == 0 |
+    (a >= 1e-7 & a < 1e15 & suppressWarnings(as.numeric(out)) == v)
+  exact[is.na(exact)] <- TRUE
+  out[!exact] <- sprintf("%a", v[!exact])
   out[is.na(v)] <- "NA"
   out[is.nan(v)] <- "NaN"
   out
+}
+
+num_parse <- function(s) {
+  s <- unlist(s)
+  v <- suppressWarnings(as.numeric(s))
+  hex <- grepl("^[+-]?0[xX]", s)
+  v[hex] <- vapply(s[hex], hex_double, 0)
+  v
+}
+
+# Exact value of a C99 hexadecimal floating constant such as 0x1.8p+3. The
+# significand is an integer below 2^53 and the scaling by powers of two
+# is exact because the value is a double.
+hex_double <- function(s) {
+  m <- regmatches(s, regexec("^([+-]?)0[xX]([0-9a-fA-F]*)(?:[.]([0-9a-fA-F]*))?[pP]([+-]?[0-9]+)$", s))[[1]]
+  if (!length(m)) return(NA_real_)
+  digits <- c(strsplit(m[3], "")[[1]], strsplit(m[4], "")[[1]])
+  if (length(digits) > 14L) return(NA_real_)
+  v <- 0
+  for (h in digits) v <- v * 16 + strtoi(h, 16L)
+  e <- as.numeric(m[5]) - 4 * nchar(m[4])
+  while (e > 1000) { v <- v * 2^1000; e <- e - 1000 }
+  while (e < -1000) { v <- v * 2^-1000; e <- e + 1000 }
+  v <- v * 2^e
+  if (m[2] == "-") -v else v
 }
 
 enc <- function(v, where) {
@@ -174,9 +216,13 @@ enc <- function(v, where) {
     sim_abort(where, " is an R function and cannot be written to a portable model file.")
   }
   extra <- setdiff(names(attributes(v)), "names")
-  if (is.matrix(v) && is.double(v) && identical(extra, "dim")) {
-    return(list(`$matrix` = list(nrow = nrow(v), ncol = ncol(v), data = as.list(num_str(as.vector(v))))))
+  if (is.matrix(v) && (is.double(v) || is.integer(v)) && identical(extra, "dim") &&
+      is.null(names(v))) {
+    out <- list(nrow = nrow(v), ncol = ncol(v), data = as.list(num_str(as.vector(v))))
+    if (is.integer(v)) out$integer <- TRUE
+    return(list(`$matrix` = out))
   }
+  if (is.matrix(v) && !is.null(names(v))) extra <- c(extra, "names")
   if (length(extra)) {
     what <- if (length(dim(v)) > 2L) "an array with more than two dimensions"
       else if (is.matrix(v)) "a matrix that is not a plain numeric matrix"
@@ -204,6 +250,18 @@ enc <- function(v, where) {
   out
 }
 
+dec_matrix <- function(m) {
+  nr <- m$nrow; nc <- m$ncol
+  if (!is_scalar_number(nr) || !is_scalar_number(nc) || nr < 0 || nc < 0 ||
+      nr != round(nr) || nc != round(nc) || length(m$data) != nr * nc) {
+    sim_abort("Model file has a malformed matrix: it declares ", format(nr), " x ",
+              format(nc), " but holds ", length(m$data), " value(s).")
+  }
+  v <- num_parse(m$data)
+  if (isTRUE(m$integer)) v <- as.integer(v)
+  matrix(v, nr, nc)
+}
+
 # JSON array of strings and nulls to a character vector, by position
 dec_chr <- function(items) {
   vapply(items, function(s) if (is.null(s)) NA_character_ else as.character(s), "")
@@ -223,8 +281,8 @@ dec <- function(x) {
       sim_transition(t$from, t$to, guard = t$guard, after = dec(t$after),
                      action = dec(t$action), priority = dec(t$priority))
     },
-    `$matrix` = matrix(as.numeric(unlist(x[[1]]$data)), x[[1]]$nrow, x[[1]]$ncol),
-    `$num` = suppressWarnings(as.numeric(unlist(x[[1]]))),
+    `$matrix` = dec_matrix(x[[1]]),
+    `$num` = num_parse(x[[1]]),
     `$int` = suppressWarnings(as.integer(unlist(x[[1]]))),
     `$chr` = dec_chr(x[[1]]),
     `$lgl` = as.logical(unlist(x[[1]])),

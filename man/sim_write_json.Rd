@@ -32,11 +32,14 @@ returns a list.
 \description{
 Models are written as versioned, declarative JSON: block types, names,
 parameters, connections, events and nested subsystems. Numbers are
-stored as strings with 17 significant digits, so they read back
-bit-for-bit; integer, logical and character vectors keep their type,
-missing values and names, and numeric matrices keep their dimensions.
-A value that could not be read back unchanged (an array with more than
-two dimensions, a matrix that is not numeric or has dimension names, a
+stored as strings: a short decimal where that reads back exactly on
+every platform, otherwise the C99 hexadecimal form (such as
+\code{"0x1.5555555555555p-2"} for 1/3), so they read back bit-for-bit;
+integer, logical and character vectors keep their type, missing values
+and names, and double and integer matrices keep their dimensions and
+storage type. A value that could not be read back unchanged (an array
+with more than two dimensions, a matrix that is not numeric or has
+dimension names or element names, a
 factor, a data frame, or any other value with a class or attributes
 other than names) is rejected when the model is written, instead of
 being saved in a different form.

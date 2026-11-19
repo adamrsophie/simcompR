@@ -133,3 +133,13 @@ test_that("Monte Carlo warns that a Box-Muller cache cannot be restored", {
                  "Box-Muller")
   expect_equal(RNGkind()[2], "Box-Muller")
 })
+
+test_that("sweeps forward on_failure and keep columns unambiguous", {
+  m <- sim_model(params = list(k = 1, run = 0))
+  sim_add_block(m, "constant", "u", value = sim_param("k"))
+  s <- sim_sweep(m, data.frame(k = 2), c(0, 1), times = 1, on_failure = "warn")
+  expect_identical(s$status, "success")
+  expect_error(sim_sweep(m, data.frame(k = 2, run = 4), c(0, 1), times = 1), "cannot be varied")
+  expect_error(sim_sweep(m, data.frame(k = c(2, 3)), c(0, 1), times = 1,
+                         summary = function(r) c(k = 1)), "also parameter")
+})

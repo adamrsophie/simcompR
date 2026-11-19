@@ -111,11 +111,18 @@ run_sets <- function(plan, sets, tspan, times, summary, keep, cores, ...) {
     sim_abort("Unknown model parameter(s): ", paste(unique(unknown), collapse = ", "),
               ". Model parameters: ", paste(names(plan$params), collapse = ", "), ".")
   }
+  clash <- intersect(unlist(lapply(sets, names)), c("run", "status"))
+  if (length(clash)) {
+    sim_abort("Parameter(s) ", paste(unique(clash), collapse = ", "), " cannot be varied in ",
+              "a sweep: `run` and `status` name the columns of the result.")
+  }
+  run_args <- list(...)
+  if (is.null(run_args$on_failure)) run_args$on_failure <- "warn"
   one <- function(i) {
     fail <- function(e) list(result = NULL, status = "failed", summary = NULL,
                              message = conditionMessage(e))
-    r <- tryCatch(sim_run(sim_set_params(plan, sets[[i]]), tspan, times = times,
-                          on_failure = "warn", ...),
+    r <- tryCatch(do.call(sim_run, c(list(sim_set_params(plan, sets[[i]]), tspan,
+                                          times = times), run_args)),
                   error = function(e) e)
     if (inherits(r, "error")) return(fail(r))
     s <- NULL
@@ -141,6 +148,11 @@ run_sets <- function(plan, sets, tspan, times, summary, keep, cores, ...) {
     vals <- lapply(runs, `[[`, "summary")
     cols <- unique(unlist(lapply(vals, names)))
     if (length(cols)) {
+      both <- intersect(cols, names(pars))
+      if (length(both)) {
+        sim_abort("Summary name(s) ", paste(both, collapse = ", "), " are also parameter ",
+                  "names; rename them in `summary` so each column means one thing.")
+      }
       tab <- matrix(NA_real_, length(vals), length(cols), dimnames = list(NULL, cols))
       for (i in seq_along(vals)) if (length(vals[[i]])) tab[i, names(vals[[i]])] <- vals[[i]]
       summ <- cbind(pars, as.data.frame(tab, optional = TRUE), status = status)

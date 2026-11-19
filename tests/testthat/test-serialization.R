@@ -117,3 +117,38 @@ test_that("schema versions must be whole numbers in range", {
   x$schema_version <- 2
   expect_error(sim_model_from_list(x), "reads version")
 })
+
+test_that("every double and integer matrix reads back bit for bit", {
+  set.seed(7)
+  v <- readBin(as.raw(sample(0:255, 8 * 2000, TRUE)), "double", 2000)
+  v <- c(v[is.finite(v)], .Machine$double.xmin, .Machine$double.xmax, 5e-324, 0.1, 1 / 3)
+  f <- tempfile(fileext = ".json")
+  on.exit(unlink(f))
+  sim_write_json(sim_model(params = list(v = v, m = matrix(1:4, 2))), f)
+  back <- sim_read_json(f)$params
+  expect_identical(back$v, v)
+  expect_identical(back$m, matrix(1:4, 2))
+  named <- structure(matrix(as.double(1:4), 2), names = letters[1:4])
+  expect_error(sim_write_json(sim_model(params = list(v = named)), f), "cannot be")
+})
+
+test_that("malformed model files are rejected", {
+  m <- sim_model()
+  sim_add_block(m, "constant", "v", value = c(1, 1))
+  sim_add_block(m, "gain", "A", gain = matrix(c(1, 2, 3, 4), 2))
+  sim_connect(m, "v", "A")
+  j <- sim_model_to_list(m)
+  j$blocks[[2]]$params$gain[[1]]$data <- list("1", "2")
+  expect_error(sim_model_from_list(j), "malformed matrix")
+
+  m <- sim_model()
+  sim_add_block(m, "constant", "r", value = 0)
+  sim_add_block(m, "integrator", "x")
+  sim_connect(m, "r", "x")
+  expect_error(sim_add_event(m, "set", sim_at(0.5), reset = list(x = "x+1", x = "x+2")),
+               "repeated")
+  sim_add_event(m, "halt", sim_at(0.5), reset = list(x = "1"), terminal = TRUE)
+  j <- sim_model_to_list(m)
+  j$events[[1]]$terminal <- "typo"
+  expect_error(sim_model_from_list(j), "not true or false")
+})
