@@ -120,7 +120,9 @@ solve_loop <- function(plan, item, t, x, d, sig, ticking) {
   tol <- plan$opts$loop_tol
   loop_name <- paste0("Algebraic loop {", paste(names(blocks), collapse = ", "), "} at t = ",
                       format(t))
-  z <- sig[zi]
+  # documented start: loop_guess where given, zero elsewhere (never the
+  # held value of a sampled block, which depends on the history)
+  z <- numeric(length(zi))
   g <- plan$loop_guess[zi]
   if (length(g)) z[!is.na(g)] <- g[!is.na(g)]
   r <- F(z)

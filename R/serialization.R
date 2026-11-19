@@ -64,6 +64,7 @@ sim_read_json <- function(path) {
 #' @export
 sim_model_to_list <- function(model) {
   check_model(model)
+  check_acyclic(model)
   blocks <- lapply(model$blocks, function(b) {
     type_def <- get_block_type(b$type)
     if (!isTRUE(type_def$portable)) {

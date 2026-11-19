@@ -66,6 +66,7 @@
 sim_compile <- function(model, algebraic_loops = c("error", "solve"),
                         loop_tol = 1e-10, loop_maxit = 50, loop_guess = NULL) {
   check_model(model)
+  check_acyclic(model)
   algebraic_loops <- match.arg(algebraic_loops)
   check_number(loop_tol, "`loop_tol`")
   if (!is_count(loop_maxit)) sim_abort("`loop_maxit` must be a positive integer.")
@@ -270,9 +271,18 @@ propagate_sizes <- function(defs, src, bnames) {
   outs <- lapply(defs, `[[`, "outputs")
   partial <- FALSE
   notes <- character()
+  # visit blocks in the order sizes flow along connections, so a chain is
+  # resolved in one pass whatever the block names
+  dep <- vector("list", nb)
+  for (i in seq_len(nb)) for (j in seq_along(ins[[i]])) {
+    k <- src[[i]][j, 1]
+    dep[[k]] <- c(dep[[k]], i)
+  }
+  dep <- lapply(dep, function(v) sort(unique(as.integer(v))))
+  visit <- unlist(condensed_order(nb, dep, tarjan_scc(nb, dep)), use.names = FALSE)
   repeat {
     changed <- FALSE
-    for (i in seq_len(nb)) {
+    for (i in visit) {
       for (j in seq_along(ins[[i]])) {
         s <- outs[[src[[i]][j, 1]]][src[[i]][j, 2]]
         if (is.na(s)) next

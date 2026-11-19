@@ -266,3 +266,20 @@ test_that("models without continuous states ignore kinks", {
   r <- sim_run(sim_compile(m), c(0, 1))
   expect_equal(sim_diagnostics(r)$stats[["segments"]], 0)
 })
+
+test_that("loop solves at sample hits start from zero, not from held values", {
+  # y = u - (u - a)(u - b) has the roots a and b; from zero Newton finds the
+  # smaller one, the held value from the previous hit would pick the other
+  m <- sim_model()
+  sim_add_block(m, "expression", "f",
+                expr = "u[1] - (u[1] - ifelse(t < 0.5, 2, -3)) * (u[1] - ifelse(t < 0.5, 5, 4))")
+  sim_add_block(m, "zero_order_hold", "h", period = 1)
+  sim_connect(m, "f", "h")
+  sim_connect(m, "h", "f")
+  run <- function(guess) {
+    p <- sim_compile(m, algebraic_loops = "solve", loop_guess = guess)
+    unname(sim_signal(sim_run(p, c(0, 1), times = c(0, 1), include_ticks = FALSE), "h"))
+  }
+  expect_equal(run(NULL), run(list(f = 0, h = 0)), tolerance = 1e-8)
+  expect_equal(run(NULL), c(2, -3), tolerance = 1e-8)
+})

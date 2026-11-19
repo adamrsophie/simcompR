@@ -64,7 +64,8 @@ subsystem_ports <- function(system, kind) {
 
 register_subsystem_blocks <- function() {
   reg <- function(...) sim_register_block_type(..., overwrite = TRUE)
-  pass <- function(p) list(inputs = NA, outputs = NA, feedthrough = TRUE,
+  # a declared size seeds size inference, also inside feedback loops
+  pass <- function(p) list(inputs = p$size, outputs = p$size, feedthrough = TRUE,
                            size_out = function(n) n,
                            check_sizes = function(n_in, n_out) {
                              if (!is.na(p$size) && n_in[[1]] != p$size) {
@@ -98,6 +99,26 @@ register_subsystem_blocks <- function() {
 # Names a subsystem may read from its scope: parameter references and the
 # free variables of string expressions (block parameters, event resets,
 # state machine guards and actions), at any depth.
+# Stop with a clear error when a subsystem contains, at any depth, a model
+# that also contains it: such a hierarchy has no finite flattening. `path`
+# holds the models above `model`, `trail` their names and block names.
+check_acyclic <- function(model, path = list(), trail = model$name) {
+  for (i in seq_along(path)) {
+    if (identical(path[[i]], model)) {
+      sim_abort("Subsystem cycle: ", paste(trail, collapse = " > "),
+                " leads back to model '", model$name, "', which would contain itself.")
+    }
+  }
+  path <- c(path, list(model))
+  for (b in model$blocks) {
+    sys <- if (identical(b$type, "subsystem")) b$params$system
+    if (inherits(sys, "sim_model")) {
+      check_acyclic(sys, path, c(trail, paste0(b$name, " (", sys$name, ")")))
+    }
+  }
+  invisible(model)
+}
+
 referenced_params <- function(model) {
   out <- character()
   walk <- function(v) {

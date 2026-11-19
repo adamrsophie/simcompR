@@ -83,3 +83,34 @@ test_that("subsystem errors name the offending path", {
   m2 <- sim_model()
   expect_error(sim_add_block(m2, "subsystem", "s", system = bad), "without gaps")
 })
+
+test_that("a subsystem cannot contain itself", {
+  s <- sim_subsystem("loopy")
+  expect_error(sim_add_block(s, "subsystem", "me", system = s), "Subsystem cycle")
+  outer <- sim_subsystem("outer")
+  inner <- sim_subsystem("inner")
+  sim_add_block(outer, "subsystem", "i", system = inner)
+  expect_error(sim_add_block(inner, "subsystem", "o", system = outer), "Subsystem cycle")
+  # a hierarchy changed behind the API is caught before it recurses
+  bad <- sim_subsystem("bad")
+  bad$blocks$self <- list(name = "self", type = "subsystem",
+                          params = list(system = bad, params = list()))
+  for (f in list(sim_compile, sim_copy, sim_model_to_list)) {
+    expect_error(f(bad), "Subsystem cycle")
+  }
+})
+
+test_that("declared port sizes seed size inference inside feedback", {
+  half <- sim_subsystem("half")
+  sim_add_block(half, "inport", "u", size = 3)
+  sim_add_block(half, "gain", "g", gain = 0.5)
+  sim_add_block(half, "outport", "y", size = 3)
+  sim_connect(half, "u", "g")
+  sim_connect(half, "g", "y")
+  m <- sim_model()
+  sim_add_block(m, "subsystem", "h", system = half)
+  sim_connect(m, "h", "h")
+  p <- sim_compile(m, algebraic_loops = "solve")
+  expect_length(p$diagnostics$notes, 0)
+  expect_equal(unname(sim_signal(sim_run(p, c(0, 1), times = 1), "h")), c(0, 0, 0))
+})

@@ -131,6 +131,9 @@ sim_add_block <- function(model, type, name, ...) {
               paste(unknown, collapse = ", "), ". Known: ",
               paste(names(type_def$params), collapse = ", "), ".")
   }
+  if (inherits(params$system, "sim_model")) {
+    check_acyclic(params$system, list(model), c(model$name, paste0(name, " (", params$system$name, ")")))
+  }
   ports <- probe_ports(type_def, params, model$params, name)
   model$blocks[[name]] <- list(name = name, type = type, params = params,
                                ports = ports)
@@ -336,6 +339,9 @@ sim_set_block_params <- function(model, block, ...) {
               paste(unknown, collapse = ", "), ".")
   }
   b$params[names(new)] <- new
+  if (inherits(b$params$system, "sim_model")) {
+    check_acyclic(b$params$system, list(model), c(model$name, paste0(block, " (", b$params$system$name, ")")))
+  }
   b$ports <- probe_ports(type_def, b$params, model$params, block)
   model$blocks[[block]] <- b
   touch(model)
@@ -416,6 +422,7 @@ print.sim_model <- function(x, ...) {
 #' @export
 sim_copy <- function(model, name = model$name) {
   check_model(model)
+  check_acyclic(model)
   out <- copy_model_env(model)
   out$name <- name
   out
