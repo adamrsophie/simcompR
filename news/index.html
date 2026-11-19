@@ -69,20 +69,22 @@
 <ul><li>Block-diagram models with named and numbered ports, model parameters and editing functions, including <code><a href="../reference/sim_add_event.html">sim_remove_event()</a></code>.</li>
 <li>Compilation into immutable plans: size propagation, direct-feedthrough graph, algebraic loop detection, deterministic execution order and reuse of the structure when only parameters change. A plan keeps the block types it was compiled with.</li>
 <li>Continuous simulation with deSolve, stopping exactly at source breakpoints, sample hits, events and the kinks of memoryless blocks (saturation, dead zone, abs, compare, lookup, minmax and the jumps of <code>sign</code>, <code>floor</code>, <code>ceiling</code> and <code>round</code>).</li>
-<li>Discrete and multirate execution with exact sample times.</li>
-<li>Scheduled and zero-crossing events, including crossings caused by jumps at segment boundaries and crossings that start exactly on their level; switch, relay and stop blocks. Top-level events can watch and reset blocks inside subsystem instances (<code>"instance/block"</code>).</li>
+<li>Discrete and multirate execution with exact sample times that do not depend on where the time axis starts.</li>
+<li>Scheduled and zero-crossing events, including crossings caused by jumps at segment boundaries and departures from a level (also with zero first derivative); switch, relay and stop blocks. All events of an instant run in one priority order, resets that cross other events cascade at the same instant, and terminal events stop once the instant is settled. Top-level events can watch and reset blocks inside subsystem instances (<code>"instance/block"</code>).</li>
+<li>Block outputs and states must stay finite; a non-finite value fails the run with a message naming its source.</li>
 <li>Optional Newton solution of algebraic loops with residual diagnostics and starting values (<code>sim_compile(loop_guess = )</code>).</li>
 <li>Hierarchical subsystems with parameter namespaces; misspelled instance parameters are errors.</li>
 <li>Parameter expressions: <code>-sim_param("a") / sim_param("tau")</code> or <code>sim_param_expr("c(1, 2 * zeta * w, w^2)")</code>, references inside list parameters, and model parameters visible in <code>expression</code> blocks and state machine guards and actions.</li>
 <li>State machine blocks.</li>
 <li>Autonomous <code>ode</code> blocks (<code>n_inputs = 0</code>).</li>
-<li>Parameter sweeps and Monte Carlo experiments with fixed seeds.</li>
-<li>Versioned JSON model files.</li>
+<li>Parameter sweeps and Monte Carlo experiments with fixed seeds; summaries are matched by name, and <code>white_noise</code> uses its own counter-based generator.</li>
+<li>Versioned JSON model files that keep integer, missing and named values exactly and refuse values they cannot represent.</li>
 <li>Fifteen vignettes and a <code>benchmarks/</code> directory.</li>
 </ul><div class="section level3">
 <h3 id="known-limitations-0-1-0">Known limitations<a class="anchor" aria-label="anchor" href="#known-limitations-0-1-0"></a></h3>
 <ul><li>Signals are real vectors of fixed size; no buses, matrices or variable-size signals. State machines are flat.</li>
 <li>Each segment between sample hits, breakpoints, events or kinks is one <code><a href="https://rdrr.io/pkg/deSolve/man/ode.html" class="external-link">deSolve::ode()</a></code> call. In the measurements of <code>benchmarks/run.R</code> a 1 kHz sampled loop cost about 0.7 to 0.8 s of CPU time per simulated second, so very fast sample rates over long spans are slow. Locating kinks adds one segment per kink (about twice the cost of the saturated sine benchmark, for the accuracy gained).</li>
+<li>With <code>RNGkind(normal.kind = "Box-Muller")</code>, <code><a href="../reference/sim_sweep.html">sim_monte_carlo()</a></code> cannot restore the cached normal deviate of the caller’s stream and warns.</li>
 <li>
 <code>method = "radau"</code> and <code>method = "iteration"</code> are not supported. Zero crossings need <code>lsoda</code>, <code>lsode</code>, <code>lsodes</code> or <code>lsodar</code>; other methods skip kinks and refuse models with events.</li>
 </ul></div>

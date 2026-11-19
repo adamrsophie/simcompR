@@ -232,11 +232,49 @@ c(status = r$status, end = max(r$time), exact = log(2))
 
 ## Simultaneous events
 
-Events that fire at the same instant are applied in increasing
-`priority`, then by name, each seeing the state left by the previous
-one. Block crossings (switch, relay, stop) are handled before model
-events. At a segment boundary the order is: scheduled events, then
-sample hits, then mode refresh.
+Several things can happen at one instant. They run in a fixed order:
+
+1.  handlers of `switch`, `relay` and `stop` blocks whose crossing the
+    solver located;
+2.  model events due now (scheduled events, located crossings and
+    crossings caused by a jump such as a step), in increasing `priority`
+    and then by name, each seeing the state left by the previous one;
+3.  sample hits, then the modes of switching blocks;
+4.  events whose signal was pushed across its level by steps 2 and 3, in
+    further layers until nothing new crosses;
+5.  functions that sit on their level and move off it in the trigger
+    direction.
+
+A terminal event stops the run only after the instant is settled. The
+result has one row before the first event and one after the last.
+
+Here a scheduled reset pushes `p` across zero, which fires a second
+event, whose reset fires a third, all at t = 0.3:
+
+``` r
+
+cas <- sim_model("cascade")
+for (nm in c("p", "q", "n")) {
+  sim_add_block(cas, "constant", paste0(nm, "_rate"), value = 0)
+  sim_add_block(cas, "integrator", nm, initial = if (nm == "n") 0 else -1)
+  sim_connect(cas, paste0(nm, "_rate"), nm)
+}
+sim_add_event(cas, "kick", sim_at(0.3), reset = list(p = "1"))
+sim_add_event(cas, "relay_p", sim_zero_crossing("p"), reset = list(q = "1"))
+sim_add_event(cas, "count", sim_zero_crossing("q"), reset = list(n = "x + 1"))
+r <- sim_run(sim_compile(cas), c(0, 1), times = c(0, 1))
+sim_events(r)[, c("time", "event")]
+#>   time   event
+#> 1  0.3    kick
+#> 2  0.3 relay_p
+#> 3  0.3   count
+tail(sim_signal(r, "n"), 1)
+#> [1] 1
+```
+
+A cascade that never settles (two events that keep flipping each other’s
+signal) ends the run with status `"event_limit"` after `max_events`
+handler executions.
 
 ## Retriggering
 
@@ -246,9 +284,11 @@ within `zc_tol` of zero is treated as starting at zero, so the same root
 is not detected twice. A crossing in the ignored direction restarts the
 solver without any action.
 
-A function that starts a segment exactly on its level, and was not just
-fired, fires when it moves away in the trigger direction. Here the state
-starts on the level and falls at once:
+A function that sits exactly on its level, and was not just fired, fires
+when it moves away in the trigger direction. The simulator finds the
+direction with a short probe integration, so this also works when the
+first derivative is zero there. Here the state starts on the level and
+falls at once:
 
 ``` r
 

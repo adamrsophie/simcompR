@@ -117,7 +117,8 @@ remove.</p></dd>
 
 
 <dt id="arg-terminal">terminal<a class="anchor" aria-label="anchor" href="#arg-terminal"></a></dt>
-<dd><p>If <code>TRUE</code>, the simulation stops after the event.</p></dd>
+<dd><p>If <code>TRUE</code>, the simulation stops after the instant at
+which the event fires.</p></dd>
 
 
 <dt id="arg-priority">priority<a class="anchor" aria-label="anchor" href="#arg-priority"></a></dt>
@@ -173,12 +174,15 @@ time. Model parameters are also visible in string expressions. Only
 string resets can be saved with <code><a href="sim_write_json.html">sim_write_json()</a></code>.</p>
 <p>A <code>signal</code> or reset target inside a subsystem instance is written as a
 path, <code>"instance/block"</code> (deeper levels add more <code>/</code> parts). A crossing
-whose function is exactly at <code>level</code> when a segment starts fires there
-when the signal moves away in the trigger direction (unless the same
-event has just fired at that instant).</p>
-<p>When several events fire at the same instant they are applied in
-increasing <code>priority</code>, then by name. Every reset sees the state left by
-the previous one.</p>
+function that sits exactly on <code>level</code> fires when the signal moves away
+in the trigger direction, including at the initial time.</p>
+<p>When several events fire at the same instant (scheduled events, located
+crossings and crossings caused by a jump at that instant) they are
+applied in increasing <code>priority</code>, then by name, and every reset sees the
+state left by the previous one. A reset that makes another event's
+signal cross its level fires that event at the same instant. A terminal
+event stops the run once the instant is settled. See <code><a href="sim_run.html">sim_run()</a></code> for the
+full order of what happens at an instant.</p>
     </div>
 
     <div class="section level2">

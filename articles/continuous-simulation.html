@@ -344,10 +344,10 @@ run:</p>
 <div class="section level2">
 <h2 id="solver-failures">Solver failures<a class="anchor" aria-label="anchor" href="#solver-failures"></a>
 </h2>
-<p>When the solver cannot reach the end of the interval,
-<code><a href="../reference/sim_run.html">sim_run()</a></code> raises an error. With
-<code>on_failure = "warn"</code> it returns the times actually reached,
-marked as failed, and never extrapolates:</p>
+<p>When the solver cannot reach the end of the interval, or a signal or
+state stops being finite, <code><a href="../reference/sim_run.html">sim_run()</a></code> raises an error naming
+the cause. With <code>on_failure = "warn"</code> it returns the times
+actually reached, marked as failed, and never extrapolates:</p>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">blow</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"blowup"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">blow</span>, <span class="st">"integrator"</span>, <span class="st">"x"</span>, initial <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
@@ -408,17 +408,13 @@ marked as failed, and never extrapolates:</p>
 <span><span class="co">#&gt; DLSODA-  Above warning has been issued I1 times.  </span></span>
 <span><span class="co">#&gt;      It will not be issued again for this problem.</span></span>
 <span><span class="co">#&gt; In above message, I1 = 10</span></span>
-<span><span class="co">#&gt;  </span></span>
-<span><span class="co">#&gt; DLSODA-  At T (=R1), too much accuracy requested  </span></span>
-<span><span class="co">#&gt;       for precision of machine..  See TOLSF (=R2) </span></span>
-<span><span class="co">#&gt; In above message, R1 = 0.999998, R2 = nan</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="va">r</span><span class="op">$</span><span class="va">status</span></span>
 <span><span class="co">#&gt; [1] "failed"</span></span>
 <span><span class="va">r</span><span class="op">$</span><span class="va">message</span></span>
-<span><span class="co">#&gt; [1] "the states became NaN or infinite at t = 0.999998"</span></span>
+<span><span class="co">#&gt; [1] "in [0, 2]: Block 'sq' returned Inf on port 1; signals must be finite"</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_signal.html">sim_times</a></span><span class="op">(</span><span class="va">r</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0.99</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] 0</span></span></code></pre></div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

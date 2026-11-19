@@ -74,16 +74,16 @@ sim_run(
 
 - max_events:
 
-  Maximum number of zero-crossing events before the run is stopped with
-  status `"event_limit"`. Guards against chattering and Zeno behavior.
+  Maximum number of event and block handler executions before the run is
+  stopped with status `"event_limit"`. Guards against chattering and
+  Zeno behavior.
 
 - zc_tol:
 
-  A zero-crossing function whose value at the start of a segment is
-  within `zc_tol` of zero is treated as exactly zero there: the same
-  root is not located again, and the event fires only if the function
-  leaves zero in its trigger direction and the event did not just fire
-  at that instant.
+  A zero-crossing function within `zc_tol` of zero is on its level:
+  arriving there counts as a crossing, the same root is not located
+  again at a restart, and leaving the level fires the event only in its
+  trigger direction (step 5 above).
 
 - on_failure:
 
@@ -110,21 +110,42 @@ and [`plot()`](https://rdrr.io/r/graphics/plot.default.html).
 discrete block, every scheduled event time and every breakpoint of a
 source (for example the time of a step). Sample hits are computed as
 `offset + k * period` with integer `k`, never by accumulating `period`,
-so they do not drift. Hits closer than `1e-12 * max(1, |t|)` are treated
-as simultaneous.
+so they do not drift and do not depend on where the time axis starts.
+Two computed times within 16 units in the last place of the largest time
+in `tspan` are the same instant; a sample period that is not far above
+that resolution is an error.
 
-**At a segment boundary** the simulator, in this order:
+**At an instant** (a segment boundary or a located crossing) the
+simulator, in this order:
 
-1.  applies scheduled events (in priority order);
+1.  runs the handlers of `switch`, `relay` and `stop` blocks whose
+    crossing was located by the solver;
 
-2.  evaluates the outputs of all blocks with a sample hit, in execution
-    order, and holds them;
+2.  runs the model events due now in increasing `priority`, then by
+    name: scheduled events, located crossings and crossings caused by a
+    jump of a signal at a segment boundary (a step, a sample hit, a
+    reset). Each event sees the states left by the one before;
 
-3.  updates the discrete states of those blocks, using the inputs from
-    step 2. Outputs are computed before states are updated, so a unit
-    delay produces `y[k] = u[k-1]`;
+3.  evaluates the outputs of all blocks with a sample hit, in execution
+    order, holds them, and then updates the discrete states of those
+    blocks from the same inputs, so a unit delay produces
+    `y[k] = u[k-1]`; then refreshes the modes of switching blocks;
 
-4.  refreshes the modes of switching blocks from their current inputs.
+4.  fires, in further layers, the events whose crossing functions were
+    crossed by steps 2 and 3, comparing each layer with the values
+    before it, until no new crossing occurs. An event does not fire
+    twice in a row from the same layer;
+
+5.  fires block handlers and events whose function sits on its level and
+    moves off it in the trigger direction, found by integrating a short
+    probe (1/1000 of the coming segment), then repeats step 4. So an
+    event can fire at the initial time, and a function whose first
+    derivative is zero there is still seen to move.
+
+A terminal event ends the run after the instant is settled, so other
+events of the same instant still run. Each handler execution counts
+toward `max_events`; a cascade that does not settle ends the run with
+status `"event_limit"`.
 
 **Inside a segment** discrete states and held outputs are constant and
 the continuous states are integrated with
@@ -134,25 +155,33 @@ exist (from
 [`sim_add_event()`](https://adamrsophie.github.io/simcompR/reference/sim_add_event.md),
 from `switch`, `relay` and `stop` blocks, or from the kinks of
 memoryless blocks such as `saturation`) the root finder stops the solver
-at the crossing; the event is applied (a kink only restarts the solver)
-and integration restarts there. A crossing that ends exactly at zero is
-not detected again at the restart. An event whose function starts a
-segment exactly on its level and was not just fired fires when the
-function moves away in the trigger direction, so an event can fire at
-the initial time. Crossings caused by jumps at a segment boundary (a
-step, a sample hit, a reset) fire at the boundary.
+at the crossing and the instant is handled as above (a kink only
+restarts the solver). A crossing that ends exactly at zero is not
+detected again at the restart.
 
 **Recording.** Signals are computed after the solve from the accepted
 states, never inside the derivative function. A value recorded at a
-sample hit is the value after the hit (right-continuous). At an event
-the result has two rows with the same time: the state before and after
-the reset.
+sample hit is the value after the hit (right-continuous). At an instant
+where events fire the result has exactly two rows with the same time:
+the values before the first event and after the last.
+
+**Finite values.** Block outputs, continuous states and discrete states
+must stay finite. A block output, reset, sample update or block handler
+that produces `NA`, `NaN` or an infinite value fails the run with a
+message naming it.
 
 **Failure.** When the solver fails, a block signals an error or the
 event limit is reached, the result is marked with a status other than
 `"success"` and contains only the times actually reached; no values are
 extrapolated. With `on_failure = "error"` (the default for solver and
 block failures) an error is raised instead.
+
+**Statistics.** `result$diagnostics$stats` sums, over all segments, the
+solver steps, right-hand side evaluations and located roots as reported
+by deSolve. `jacobians` counts Jacobian evaluations and LU
+decompositions for the ODEPACK solvers (`lsoda`, `lsode`, `lsodes`,
+`lsodar`, `vode`, `bdf`, `adams`) and is `NA` for solvers that do not
+report it.
 
 ## Examples
 

@@ -23,7 +23,11 @@ sim_add_block(model, type, name, ...)
 - name:
 
   Unique block name. Names may not contain `/`, which separates
-  subsystem levels in compiled names.
+  subsystem levels in compiled names, nor `[`, `]` or `:`, which appear
+  in the names of signal elements and result columns; `"time"` and
+  `"kind"` are reserved for result columns. Every signal of the compiled
+  model (block outputs, `block.port` names and subsystem outputs) must
+  have its own name.
 
 - ...:
 
@@ -35,7 +39,9 @@ sim_add_block(model, type, name, ...)
 
 A `sim_block` handle that can be passed to
 [`sim_connect()`](https://adamrsophie.github.io/simcompR/reference/sim_connect.md).
-The model is modified in place.
+A handle works only with the model that created it and its
+[`sim_copy()`](https://adamrsophie.github.io/simcompR/reference/sim_copy.md)
+copies. The model is modified in place.
 
 ## Examples
 

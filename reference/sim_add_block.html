@@ -87,7 +87,11 @@
 
 <dt id="arg-name">name<a class="anchor" aria-label="anchor" href="#arg-name"></a></dt>
 <dd><p>Unique block name. Names may not contain <code>/</code>, which separates
-subsystem levels in compiled names.</p></dd>
+subsystem levels in compiled names, nor <code>[</code>, <code>]</code> or <code>:</code>, which appear in
+the names of signal elements and result columns; <code>"time"</code> and <code>"kind"</code>
+are reserved for result columns. Every signal of the compiled model
+(block outputs, <code>block.port</code> names and subsystem outputs) must have
+its own name.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
@@ -98,7 +102,8 @@ reference.</p></dd>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A <code>sim_block</code> handle that can be passed to <code><a href="sim_connect.html">sim_connect()</a></code>.
-The model is modified in place.</p>
+A handle works only with the model that created it and its
+<code><a href="sim_copy.html">sim_copy()</a></code> copies. The model is modified in place.</p>
     </div>
 
     <div class="section level2">

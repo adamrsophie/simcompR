@@ -344,11 +344,46 @@ success.</p>
 <div class="section level2">
 <h2 id="simultaneous-events">Simultaneous events<a class="anchor" aria-label="anchor" href="#simultaneous-events"></a>
 </h2>
-<p>Events that fire at the same instant are applied in increasing
-<code>priority</code>, then by name, each seeing the state left by the
-previous one. Block crossings (switch, relay, stop) are handled before
-model events. At a segment boundary the order is: scheduled events, then
-sample hits, then mode refresh.</p>
+<p>Several things can happen at one instant. They run in a fixed
+order:</p>
+<ol style="list-style-type: decimal">
+<li>handlers of <code>switch</code>, <code>relay</code> and
+<code>stop</code> blocks whose crossing the solver located;</li>
+<li>model events due now (scheduled events, located crossings and
+crossings caused by a jump such as a step), in increasing
+<code>priority</code> and then by name, each seeing the state left by
+the previous one;</li>
+<li>sample hits, then the modes of switching blocks;</li>
+<li>events whose signal was pushed across its level by steps 2 and 3, in
+further layers until nothing new crosses;</li>
+<li>functions that sit on their level and move off it in the trigger
+direction.</li>
+</ol>
+<p>A terminal event stops the run only after the instant is settled. The
+result has one row before the first event and one after the last.</p>
+<p>Here a scheduled reset pushes <code>p</code> across zero, which fires
+a second event, whose reset fires a third, all at <span class="math inline">t = 0.3</span>:</p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">cas</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"cascade"</span><span class="op">)</span></span>
+<span><span class="kw">for</span> <span class="op">(</span><span class="va">nm</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"p"</span>, <span class="st">"q"</span>, <span class="st">"n"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
+<span>  <span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">cas</span>, <span class="st">"constant"</span>, <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="va">nm</span>, <span class="st">"_rate"</span><span class="op">)</span>, value <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">cas</span>, <span class="st">"integrator"</span>, <span class="va">nm</span>, initial <span class="op">=</span> <span class="kw">if</span> <span class="op">(</span><span class="va">nm</span> <span class="op">==</span> <span class="st">"n"</span><span class="op">)</span> <span class="fl">0</span> <span class="kw">else</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="../reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">cas</span>, <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="va">nm</span>, <span class="st">"_rate"</span><span class="op">)</span>, <span class="va">nm</span><span class="op">)</span></span>
+<span><span class="op">}</span></span>
+<span><span class="fu"><a href="../reference/sim_add_event.html">sim_add_event</a></span><span class="op">(</span><span class="va">cas</span>, <span class="st">"kick"</span>, <span class="fu"><a href="../reference/sim_add_event.html">sim_at</a></span><span class="op">(</span><span class="fl">0.3</span><span class="op">)</span>, reset <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>p <span class="op">=</span> <span class="st">"1"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_event.html">sim_add_event</a></span><span class="op">(</span><span class="va">cas</span>, <span class="st">"relay_p"</span>, <span class="fu"><a href="../reference/sim_add_event.html">sim_zero_crossing</a></span><span class="op">(</span><span class="st">"p"</span><span class="op">)</span>, reset <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>q <span class="op">=</span> <span class="st">"1"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_event.html">sim_add_event</a></span><span class="op">(</span><span class="va">cas</span>, <span class="st">"count"</span>, <span class="fu"><a href="../reference/sim_add_event.html">sim_zero_crossing</a></span><span class="op">(</span><span class="st">"q"</span><span class="op">)</span>, reset <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>n <span class="op">=</span> <span class="st">"x + 1"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">r</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">cas</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>, times <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_signal.html">sim_events</a></span><span class="op">(</span><span class="va">r</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"time"</span>, <span class="st">"event"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt;   time   event</span></span>
+<span><span class="co">#&gt; 1  0.3    kick</span></span>
+<span><span class="co">#&gt; 2  0.3 relay_p</span></span>
+<span><span class="co">#&gt; 3  0.3   count</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">tail</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_signal.html">sim_signal</a></span><span class="op">(</span><span class="va">r</span>, <span class="st">"n"</span><span class="op">)</span>, <span class="fl">1</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 1</span></span></code></pre></div>
+<p>A cascade that never settles (two events that keep flipping each
+other’s signal) ends the run with status <code>"event_limit"</code>
+after <code>max_events</code> handler executions.</p>
 </div>
 <div class="section level2">
 <h2 id="retriggering">Retriggering<a class="anchor" aria-label="anchor" href="#retriggering"></a>
@@ -358,10 +393,12 @@ round-off of, zero. A function whose value at the start of a segment is
 within <code>zc_tol</code> of zero is treated as starting at zero, so
 the same root is not detected twice. A crossing in the ignored direction
 restarts the solver without any action.</p>
-<p>A function that starts a segment exactly on its level, and was not
-just fired, fires when it moves away in the trigger direction. Here the
-state starts on the level and falls at once:</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<p>A function that sits exactly on its level, and was not just fired,
+fires when it moves away in the trigger direction. The simulator finds
+the direction with a short probe integration, so this also works when
+the first derivative is zero there. Here the state starts on the level
+and falls at once:</p>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">saw</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"saw"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">saw</span>, <span class="st">"constant"</span>, <span class="st">"down"</span>, value <span class="op">=</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">saw</span>, <span class="st">"integrator"</span>, <span class="st">"x"</span><span class="op">)</span></span>

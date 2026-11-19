@@ -15,11 +15,17 @@ First release.
   breakpoints, sample hits, events and the kinks of memoryless blocks
   (saturation, dead zone, abs, compare, lookup, minmax and the jumps of
   `sign`, `floor`, `ceiling` and `round`).
-- Discrete and multirate execution with exact sample times.
+- Discrete and multirate execution with exact sample times that do not
+  depend on where the time axis starts.
 - Scheduled and zero-crossing events, including crossings caused by
-  jumps at segment boundaries and crossings that start exactly on their
-  level; switch, relay and stop blocks. Top-level events can watch and
-  reset blocks inside subsystem instances (`"instance/block"`).
+  jumps at segment boundaries and departures from a level (also with
+  zero first derivative); switch, relay and stop blocks. All events of
+  an instant run in one priority order, resets that cross other events
+  cascade at the same instant, and terminal events stop once the instant
+  is settled. Top-level events can watch and reset blocks inside
+  subsystem instances (`"instance/block"`).
+- Block outputs and states must stay finite; a non-finite value fails
+  the run with a message naming its source.
 - Optional Newton solution of algebraic loops with residual diagnostics
   and starting values (`sim_compile(loop_guess = )`).
 - Hierarchical subsystems with parameter namespaces; misspelled instance
@@ -30,8 +36,11 @@ First release.
   state machine guards and actions.
 - State machine blocks.
 - Autonomous `ode` blocks (`n_inputs = 0`).
-- Parameter sweeps and Monte Carlo experiments with fixed seeds.
-- Versioned JSON model files.
+- Parameter sweeps and Monte Carlo experiments with fixed seeds;
+  summaries are matched by name, and `white_noise` uses its own
+  counter-based generator.
+- Versioned JSON model files that keep integer, missing and named values
+  exactly and refuse values they cannot represent.
 - Fifteen vignettes and a `benchmarks/` directory.
 
 ### Known limitations
@@ -45,6 +54,10 @@ First release.
   rates over long spans are slow. Locating kinks adds one segment per
   kink (about twice the cost of the saturated sine benchmark, for the
   accuracy gained).
+- With `RNGkind(normal.kind = "Box-Muller")`,
+  [`sim_monte_carlo()`](https://adamrsophie.github.io/simcompR/reference/sim_sweep.md)
+  cannot restore the cached normal deviate of the caller’s stream and
+  warns.
 - `method = "radau"` and `method = "iteration"` are not supported. Zero
   crossings need `lsoda`, `lsode`, `lsodes` or `lsodar`; other methods
   skip kinks and refuse models with events.

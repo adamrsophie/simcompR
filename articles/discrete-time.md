@@ -173,5 +173,5 @@ Models with no continuous states never call the ODE solver:
 
 sim_diagnostics(sim_run(sim_compile(rec), c(0, 1)))$stats
 #>        segments           steps rhs_evaluations       jacobians           roots 
-#>               0               0               0               0               0
+#>               0               0               0              NA               0
 ```

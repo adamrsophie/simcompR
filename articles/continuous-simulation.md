@@ -235,10 +235,11 @@ sim_signal(r, "x") / exp(-2)
 
 ## Solver failures
 
-When the solver cannot reach the end of the interval,
+When the solver cannot reach the end of the interval, or a signal or
+state stops being finite,
 [`sim_run()`](https://adamrsophie.github.io/simcompR/reference/sim_run.md)
-raises an error. With `on_failure = "warn"` it returns the times
-actually reached, marked as failed, and never extrapolates:
+raises an error naming the cause. With `on_failure = "warn"` it returns
+the times actually reached, marked as failed, and never extrapolates:
 
 ``` r
 
@@ -301,15 +302,11 @@ r <- suppressWarnings(sim_run(sim_compile(blow), c(0, 2), on_failure = "warn"))
 #> DLSODA-  Above warning has been issued I1 times.  
 #>      It will not be issued again for this problem.
 #> In above message, I1 = 10
-#>  
-#> DLSODA-  At T (=R1), too much accuracy requested  
-#>       for precision of machine..  See TOLSF (=R2) 
-#> In above message, R1 = 0.999998, R2 = nan
 #> 
 r$status
 #> [1] "failed"
 r$message
-#> [1] "the states became NaN or infinite at t = 0.999998"
+#> [1] "in [0, 2]: Block 'sq' returned Inf on port 1; signals must be finite"
 max(sim_times(r))
-#> [1] 0.99
+#> [1] 0
 ```
