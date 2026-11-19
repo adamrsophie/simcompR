@@ -210,8 +210,8 @@ sim_signal(r, "x") / exp(-2)
 
 ## Solver failures
 
-When the solver cannot reach the end of the interval, `sim_run()` raises an
-error. With `on_failure = "warn"` it returns the times actually reached,
+When the solver cannot reach the end of the interval, or a signal or state
+stops being finite, `sim_run()` raises an error naming the cause. With `on_failure = "warn"` it returns the times actually reached,
 marked as failed, and never extrapolates:
 
 ```{r}

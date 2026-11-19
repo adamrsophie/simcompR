@@ -38,7 +38,8 @@ remove.}
 
 \item{reset}{Named list of state resets (see Details).}
 
-\item{terminal}{If \code{TRUE}, the simulation stops after the event.}
+\item{terminal}{If \code{TRUE}, the simulation stops after the instant at
+which the event fires.}
 
 \item{priority}{Ordering among simultaneous events (smaller first).}
 
@@ -83,13 +84,16 @@ string resets can be saved with \code{\link[=sim_write_json]{sim_write_json()}}.
 
 A \code{signal} or reset target inside a subsystem instance is written as a
 path, \code{"instance/block"} (deeper levels add more \code{/} parts). A crossing
-whose function is exactly at \code{level} when a segment starts fires there
-when the signal moves away in the trigger direction (unless the same
-event has just fired at that instant).
+function that sits exactly on \code{level} fires when the signal moves away
+in the trigger direction, including at the initial time.
 
-When several events fire at the same instant they are applied in
-increasing \code{priority}, then by name. Every reset sees the state left by
-the previous one.
+When several events fire at the same instant (scheduled events, located
+crossings and crossings caused by a jump at that instant) they are
+applied in increasing \code{priority}, then by name, and every reset sees the
+state left by the previous one. A reset that makes another event's
+signal cross its level fires that event at the same instant. A terminal
+event stops the run once the instant is settled. See \code{\link[=sim_run]{sim_run()}} for the
+full order of what happens at an instant.
 }
 \examples{
 # Bouncing ball: h'' = -g, reverse and damp the velocity at impact.

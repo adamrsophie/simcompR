@@ -139,7 +139,8 @@ test_that("sine, product and math blocks evaluate as documented", {
   sim_connect(m, "s", "sat")
   sim_connect(m, "s", "ex")
   times <- c(0.5, 1, 2)
-  r <- sim_run(sim_compile(m), c(0, 2), times = times)
+  # s / t is infinite at t = 0, so the run starts later
+  r <- sim_run(sim_compile(m), c(0.25, 2), times = times)
   s <- 1 + 2 * sin(3 * times + 0.5)
   expect_equal(unname(sim_signal(r, "p")), s / times)
   expect_equal(unname(sim_signal(r, "e")), exp(times))

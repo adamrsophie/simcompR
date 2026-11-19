@@ -22,20 +22,24 @@
 #'
 #' A `signal` or reset target inside a subsystem instance is written as a
 #' path, `"instance/block"` (deeper levels add more `/` parts). A crossing
-#' whose function is exactly at `level` when a segment starts fires there
-#' when the signal moves away in the trigger direction (unless the same
-#' event has just fired at that instant).
+#' function that sits exactly on `level` fires when the signal moves away
+#' in the trigger direction, including at the initial time.
 #'
-#' When several events fire at the same instant they are applied in
-#' increasing `priority`, then by name. Every reset sees the state left by
-#' the previous one.
+#' When several events fire at the same instant (scheduled events, located
+#' crossings and crossings caused by a jump at that instant) they are
+#' applied in increasing `priority`, then by name, and every reset sees the
+#' state left by the previous one. A reset that makes another event's
+#' signal cross its level fires that event at the same instant. A terminal
+#' event stops the run once the instant is settled. See [sim_run()] for the
+#' full order of what happens at an instant.
 #'
 #' @param model A [sim_model()].
 #' @param name Unique event name; for `sim_remove_event()`, the event to
 #'   remove.
 #' @param trigger A trigger from `sim_zero_crossing()` or `sim_at()`.
 #' @param reset Named list of state resets (see Details).
-#' @param terminal If `TRUE`, the simulation stops after the event.
+#' @param terminal If `TRUE`, the simulation stops after the instant at
+#'   which the event fires.
 #' @param priority Ordering among simultaneous events (smaller first).
 #' @param signal Block (name or handle) whose output is watched.
 #' @param direction `"rising"`, `"falling"` or `"either"`.

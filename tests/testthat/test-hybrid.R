@@ -179,3 +179,111 @@ test_that("event resets may use functions, signals and parameters", {
   expect_error(sim_add_event(m, "bad", sim_at(1), reset = list(v = "system('ls')")),
                "not allowed")
 })
+
+held_states <- function(init) {
+  m <- sim_model()
+  for (nm in names(init)) {
+    sim_add_block(m, "constant", paste0(nm, "_in"), value = 0)
+    sim_add_block(m, "integrator", nm, initial = init[[nm]])
+    sim_connect(m, paste0(nm, "_in"), nm)
+  }
+  m
+}
+
+test_that("blocks and events leaving their level at the start fire there", {
+  # switch control t departs 0 upward at once: output 2 for all t > 0
+  m <- sim_model()
+  sim_add_block(m, "time", "t")
+  sim_add_block(m, "constant", "hi", value = 2)
+  sim_add_block(m, "constant", "lo", value = -1)
+  sim_add_block(m, "switch", "sw", criterion = ">", threshold = 0)
+  sim_add_block(m, "integrator", "x")
+  sim_connect(m, "hi", "sw", input = 1)
+  sim_connect(m, "t", "sw", input = 2)
+  sim_connect(m, "lo", "sw", input = 3)
+  sim_connect(m, "sw", "x")
+  r <- sim_run(sim_compile(m), c(0, 2), times = c(0, 2))
+  expect_equal(unname(tail(sim_signal(r, "x"), 1)), 4, tolerance = 1e-7)
+
+  # relay at its on point turns on as the input rises
+  m <- sim_model()
+  sim_add_block(m, "time", "t")
+  sim_add_block(m, "relay", "rl", on_point = 0, off_point = -0.5, on_value = 3, off_value = 0)
+  sim_add_block(m, "integrator", "x")
+  sim_connect(m, "t", "rl")
+  sim_connect(m, "rl", "x")
+  r <- sim_run(sim_compile(m), c(0, 2), times = c(0, 2))
+  expect_equal(unname(tail(sim_signal(r, "x"), 1)), 6, tolerance = 1e-7)
+
+  # a stop block whose input rises from its threshold stops at once
+  m <- sim_model()
+  sim_add_block(m, "time", "t")
+  sim_add_block(m, "stop", "halt", threshold = 0)
+  sim_connect(m, "t", "halt")
+  r <- sim_run(sim_compile(m), c(0, 2), times = c(0, 2))
+  expect_equal(r$status, "terminated")
+  expect_equal(max(sim_times(r)), 0)
+
+  # x = t^3 / 3 has zero slope at 0 but rises: the event fires at 0
+  m <- sim_model()
+  sim_add_block(m, "ode", "x", n_inputs = 0, initial = 0, deriv = function(t, x, u) t^2)
+  sim_add_event(m, "up", sim_zero_crossing("x", direction = "rising"), terminal = TRUE)
+  sim_add_event(m, "down", sim_zero_crossing("x", direction = "falling"), terminal = TRUE)
+  r <- sim_run(sim_compile(m), c(0, 2), times = c(0, 2))
+  expect_equal(r$status, "terminated")
+  expect_equal(sim_events(r)$event, "up")
+  expect_equal(max(sim_times(r)), 0)
+})
+
+test_that("resets that cross other events cascade at the same instant", {
+  m <- held_states(c(p = -2, q = -2, k = 0))
+  sim_add_block(m, "time", "t")
+  sim_add_event(m, "first", sim_zero_crossing("t", level = 0.3), reset = list(p = "5"))
+  sim_add_event(m, "second", sim_zero_crossing("p"), reset = list(q = "7"))
+  sim_add_event(m, "third", sim_zero_crossing("q"), reset = list(k = "x + 10"))
+  r <- sim_run(sim_compile(m), c(0, 1), times = c(0, 1))
+  ev <- sim_events(r)
+  expect_equal(ev$event, c("first", "second", "third"))
+  expect_equal(ev$time, rep(0.3, 3), tolerance = 1e-8)
+  expect_equal(unname(tail(sim_signal(r, "k"), 1)), 10)
+  # one row before the first event and one after the last
+  expect_equal(sum(abs(sim_times(r) - 0.3) < 1e-8), 2L)
+
+  m <- held_states(c(p = -2, q = -2, k = 0))
+  sim_add_event(m, "first", sim_at(0.6), reset = list(p = "5"))
+  sim_add_event(m, "second", sim_zero_crossing("p"), reset = list(q = "7"))
+  sim_add_event(m, "third", sim_zero_crossing("q"), reset = list(k = "x + 10"))
+  r <- sim_run(sim_compile(m), c(0, 1), times = c(0, 1))
+  expect_equal(sim_events(r)$event, c("first", "second", "third"))
+  expect_equal(unname(tail(sim_signal(r, "k"), 1)), 10)
+})
+
+test_that("events of one instant follow priority across trigger types", {
+  for (term in c(FALSE, TRUE)) {
+    m <- held_states(c(v = 1))
+    sim_add_block(m, "time", "t")
+    sim_add_event(m, "late", sim_zero_crossing("t", level = 0.4),
+                  reset = list(v = "x * 10"), priority = 5, terminal = term)
+    sim_add_event(m, "early", sim_at(0.4), reset = list(v = "x + 4"), priority = 1)
+    r <- sim_run(sim_compile(m), c(0, 1), times = c(0, 1))
+    expect_equal(sim_events(r)$event, c("early", "late"), info = term)
+    expect_equal(unname(tail(sim_signal(r, "v"), 1)), 50, info = term)
+  }
+  # a terminal event still lets later events of the same instant run
+  m <- held_states(c(v = 1))
+  sim_add_event(m, "stop_first", sim_at(0.4), terminal = TRUE, priority = 1)
+  sim_add_event(m, "after", sim_at(0.4), reset = list(v = "x + 1"), priority = 2)
+  r <- sim_run(sim_compile(m), c(0, 1), times = c(0, 1))
+  expect_equal(r$status, "terminated")
+  expect_equal(unname(tail(sim_signal(r, "v"), 1)), 2)
+})
+
+test_that("cascades that never settle end at the event limit", {
+  # each event flips the signal the other one watches
+  m <- held_states(c(a = -1, b = -1))
+  sim_add_event(m, "kick", sim_at(0.5), reset = list(a = "1"))
+  sim_add_event(m, "ping", sim_zero_crossing("a"), reset = list(b = "-x"))
+  sim_add_event(m, "pong", sim_zero_crossing("b"), reset = list(a = "-x"))
+  r <- suppressWarnings(sim_run(sim_compile(m), c(0, 1), max_events = 20, on_failure = "warn"))
+  expect_equal(r$status, "event_limit")
+})

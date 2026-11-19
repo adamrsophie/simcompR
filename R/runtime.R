@@ -13,7 +13,7 @@ write_outputs <- function(b, y, sig, strict = FALSE) {
   # fast path: one port, a plain numeric vector of the right length
   if (!is.list(y) && length(b$out_idx) == 1L && is.double(y) && is.null(dim(y))) {
     idx <- b$out_idx[[1L]]
-    if (length(y) == length(idx) && !(strict && anyNA(y))) {
+    if (length(y) == length(idx) && !(strict && !all(is.finite(y)))) {
       sig[idx] <- y
       return(sig)
     }
@@ -30,8 +30,9 @@ write_outputs <- function(b, y, sig, strict = FALSE) {
                 "; outputs must be numeric vectors.")
     }
     v <- as.numeric(v)
-    if (strict && anyNA(v)) {
-      sim_abort("Block '", b$name, "' returned NA or NaN on port ", j, ".")
+    if (strict && !all(is.finite(v))) {
+      sim_abort("Block '", b$name, "' returned ", format(v[!is.finite(v)][1]), " on port ", j,
+                "; signals must be finite.")
     }
     if (length(v) != length(b$out_idx[[j]])) {
       sim_abort("Block '", b$name, "' returned an output of length ", length(v),
