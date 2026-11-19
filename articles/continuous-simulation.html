@@ -178,7 +178,7 @@ between stiff and nonstiff methods. Tolerances are
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">r</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="va">plan</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">3</span><span class="op">)</span>, times <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">3</span>, <span class="fl">0.01</span><span class="op">)</span>, method <span class="op">=</span> <span class="st">"rk4"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">tail</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_signal.html">sim_signal</a></span><span class="op">(</span><span class="va">r</span>, <span class="st">"x"</span><span class="op">)</span>, <span class="fl">1</span><span class="op">)</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="op">-</span><span class="fl">6</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 2.016337e-11</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] 1.335234e-13</span></span></code></pre></div>
 <p>Pass <code>hmax</code> to cap the step size, <code>maxsteps</code> to
 allow more steps per segment, and any other <code>deSolve</code>
 argument through <code>...</code>.</p>
@@ -412,9 +412,9 @@ actually reached, marked as failed, and never extrapolates:</p>
 <span><span class="va">r</span><span class="op">$</span><span class="va">status</span></span>
 <span><span class="co">#&gt; [1] "failed"</span></span>
 <span><span class="va">r</span><span class="op">$</span><span class="va">message</span></span>
-<span><span class="co">#&gt; [1] "in [0, 2]: Block 'sq' returned Inf on port 1; signals must be finite"</span></span>
+<span><span class="co">#&gt; [1] "at t = 0.999998: Block 'sq' returned Inf on port 1; signals must be finite"</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_signal.html">sim_times</a></span><span class="op">(</span><span class="va">r</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] 0.99</span></span></code></pre></div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

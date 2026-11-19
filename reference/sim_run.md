@@ -46,7 +46,9 @@ sim_run(
   Integration method passed to
   [`deSolve::ode()`](https://rdrr.io/pkg/deSolve/man/ode.html). Models
   with zero crossings need one of `"lsoda"`, `"lsode"`, `"lsodes"` or
-  `"lsodar"`.
+  `"lsodar"`. The fixed-step methods `"euler"` and `"rk4"` take steps of
+  at most `hmax`, by default `(tf - t0) / 1000`, shortened to end at
+  every boundary and output time.
 
 - rtol, atol:
 
@@ -83,7 +85,12 @@ sim_run(
   A zero-crossing function within `zc_tol` of zero is on its level:
   arriving there counts as a crossing, the same root is not located
   again at a restart, and leaving the level fires the event only in its
-  trigger direction (step 5 above).
+  trigger direction (step 5 above). Leaving means moving away from zero;
+  a function that approaches zero inside the band, or stays on it, is
+  watched until it leaves the band, and the event fires then in the
+  direction of the side it leaves on. A function that enters the band
+  without reaching zero (an asymptotic approach) is reported once, at
+  the next segment boundary.
 
 - on_failure:
 

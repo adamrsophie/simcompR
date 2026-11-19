@@ -109,7 +109,9 @@ taken by the integrator.</p></dd>
 <dt id="arg-method">method<a class="anchor" aria-label="anchor" href="#arg-method"></a></dt>
 <dd><p>Integration method passed to <code><a href="https://rdrr.io/pkg/deSolve/man/ode.html" class="external-link">deSolve::ode()</a></code>. Models with
 zero crossings need one of <code>"lsoda"</code>, <code>"lsode"</code>, <code>"lsodes"</code> or
-<code>"lsodar"</code>.</p></dd>
+<code>"lsodar"</code>. The fixed-step methods <code>"euler"</code> and <code>"rk4"</code> take steps of
+at most <code>hmax</code>, by default <code>(tf - t0) / 1000</code>, shortened to end at
+every boundary and output time.</p></dd>
 
 
 <dt id="arg-rtol-atol">rtol, atol<a class="anchor" aria-label="anchor" href="#arg-rtol-atol"></a></dt>
@@ -148,7 +150,12 @@ chattering and Zeno behavior.</p></dd>
 <dd><p>A zero-crossing function within <code>zc_tol</code> of zero is on its
 level: arriving there counts as a crossing, the same root is not
 located again at a restart, and leaving the level fires the event
-only in its trigger direction (step 5 above).</p></dd>
+only in its trigger direction (step 5 above). Leaving means moving
+away from zero; a function that approaches zero inside the band, or
+stays on it, is watched until it leaves the band, and the event fires
+then in the direction of the side it leaves on. A function that enters
+the band without reaching zero (an asymptotic approach) is reported
+once, at the next segment boundary.</p></dd>
 
 
 <dt id="arg-on-failure">on_failure<a class="anchor" aria-label="anchor" href="#arg-on-failure"></a></dt>

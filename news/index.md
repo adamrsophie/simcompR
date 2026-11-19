@@ -14,7 +14,12 @@ First release.
 - Continuous simulation with deSolve, stopping exactly at source
   breakpoints, sample hits, events and the kinks of memoryless blocks
   (saturation, dead zone, abs, compare, lookup, minmax and the jumps of
-  `sign`, `floor`, `ceiling` and `round`).
+  `sign`, `floor`, `ceiling` and `round`). The outputs of `compare`,
+  `sign`, `floor`, `ceiling` and `round` jump at the located instant, so
+  switches, stop blocks and events downstream see the jump. The
+  fixed-step methods `"euler"` and `"rk4"` step by `hmax` (by default
+  `(tf - t0) / 1000`), not by the output grid. A block failure inside a
+  segment keeps the output times reached before it.
 - Discrete and multirate execution with exact sample times that do not
   depend on where the time axis starts.
 - Scheduled and zero-crossing events, including crossings caused by

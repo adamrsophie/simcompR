@@ -89,7 +89,7 @@ Fixed-step methods are available for comparison:
 
 r <- sim_run(plan, c(0, 3), times = seq(0, 3, 0.01), method = "rk4")
 abs(tail(sim_signal(r, "x"), 1) - exp(-6))
-#> [1] 2.016337e-11
+#> [1] 1.335234e-13
 ```
 
 Pass `hmax` to cap the step size, `maxsteps` to allow more steps per
@@ -307,7 +307,7 @@ r <- suppressWarnings(sim_run(sim_compile(blow), c(0, 2), on_failure = "warn"))
 r$status
 #> [1] "failed"
 r$message
-#> [1] "in [0, 2]: Block 'sq' returned Inf on port 1; signals must be finite"
+#> [1] "at t = 0.999998: Block 'sq' returned Inf on port 1; signals must be finite"
 max(sim_times(r))
-#> [1] 0
+#> [1] 0.99
 ```

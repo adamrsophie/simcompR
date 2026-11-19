@@ -81,12 +81,12 @@ g <- 9.81; t1 <- sqrt(2 * 2 / g); v <- 0.8 * g * t1
 exact <- t1
 for (i in 1:4) { exact <- c(exact, tail(exact, 1) + 2 * v / g); v <- 0.8 * v }
 cbind(simulated = sim_events(r)$time[1:5], exact, error = sim_events(r)$time[1:5] - exact)
-#>      simulated     exact        error
-#> [1,] 0.6385509 0.6385509 7.660539e-15
-#> [2,] 1.6602322 1.6602322 3.108624e-14
-#> [3,] 2.4775773 2.4775773 5.684342e-14
-#> [4,] 3.1314534 3.1314534 8.260059e-14
-#> [5,] 3.6545543 3.6545543 1.039169e-13
+#>      simulated     exact         error
+#> [1,] 0.6385509 0.6385509  7.660539e-15
+#> [2,] 1.6602322 1.6602322  1.865175e-14
+#> [3,] 2.4775773 2.4775773  2.442491e-14
+#> [4,] 3.1314534 3.1314534  1.421085e-14
+#> [5,] 3.6545543 3.6545543 -2.664535e-15
 ```
 
 The differences are event-location errors of the root finder, controlled
