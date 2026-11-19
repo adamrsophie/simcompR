@@ -47,7 +47,9 @@ register_logic_blocks <- function() {
       build = function(p) {
         thr <- check_number(p$threshold, "`threshold`")
         crit <- match.arg(p$criterion, c(">=", ">", "!="))
-        tol <- 1e-9 * (1 + abs(thr))
+        # on the threshold within rounding of u - threshold, never a band wide
+        # enough to hide a jump across it
+        tol <- max(1e-9, 8 * .Machine$double.eps * abs(thr))
         test <- function(c2) switch(crit, ">=" = c2 >= thr, ">" = c2 > thr,
                                     "!=" = c2 != thr)
         # The discrete state is the mode (1 = pass in1). It changes only at
@@ -69,9 +71,13 @@ register_logic_blocks <- function() {
                mode <- if (crit == "!=") 1 else if (direction == "rising") 1 else 0
                list(d = mode)
              },
+             # control resting on the threshold: the criterion at equality
+             on_rest = function(i, t, x, d, u) list(d = as.numeric(test(thr))),
+             # on the threshold the mode is decided by where the control goes
+             # next (on_zc on a departure, on_rest on a plateau), not here
              modes = function(t, x, d, u) {
                g <- u[[2]] - thr
-               if (d[[1]] >= 0 && abs(g) <= tol && crit != "!=") d else as.numeric(test(u[[2]]))
+               if (d[[1]] >= 0 && abs(g) <= tol) d else as.numeric(test(u[[2]]))
              })
       })
 

@@ -12,7 +12,8 @@ record_signals <- function(plan, rows) {
                   error = paste0("at t = ", format(r$t), ": ", conditionMessage(ev))))
     }
     S[k, ] <- ev$sig
-    if (!is.null(ev$loop)) loop_res <- rbind(loop_res, cbind(time = r$t, ev$loop))
+    lp <- r$loop %||% ev$loop
+    if (!is.null(lp)) loop_res <- rbind(loop_res, cbind(time = r$t, lp))
   }
   list(S = S, loop = loop_res, ok = n, error = NULL)
 }

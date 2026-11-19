@@ -127,7 +127,8 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
     sim_abort("`tspan` must be c(start, end) with end > start.")
   }
   t0 <- tspan[1]; tf <- tspan[2]
-  tol <- time_tol(c(t0, tf))
+  # never so coarse that the two ends of a short span would merge
+  tol <- min(time_tol(c(t0, tf)), (tf - t0) / 4)
   if (is.null(times)) times <- seq(t0, tf, length.out = 201L)
   times <- check_numeric(times, "`times`")
   if (any(times < t0 - tol | times > tf + tol)) sim_abort("`times` must lie within `tspan`.")
@@ -190,28 +191,42 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
     sim_warn("Scheduled event(s) ", paste(names(sched)[outside], collapse = ", "),
              " have times outside tspan [", format(t0), ", ", format(tf), "]; those times are skipped.")
   }
-  brk <- unlist(lapply(plan$blocks, function(b) {
-    if (is.function(b$def$breakpoints)) b$def$breakpoints(t0, tf)
-  }))
-  brk <- brk[brk > t0 & brk < tf]
-  bounds <- merge_times(c(t0, tf, unlist(ticks),
-                          unlist(lapply(sched, function(e) e$trigger$times)), brk), tol)
-  bounds <- bounds[bounds >= t0 - tol & bounds <= tf + tol]
-  bounds[1] <- t0
-  bounds[length(bounds)] <- tf
-  near <- function(v) match_tol(v, bounds, tol)
-  tick_at <- vector("list", length(bounds))
-  for (r in seq_along(ticks)) {
-    for (i in stats::na.omit(near(ticks[[r]]))) tick_at[[i]] <- c(tick_at[[i]], r)
+  # every time that cuts the interval, tagged with what it is
+  bp_list <- lapply(seq_along(plan$blocks), function(i) {
+    b <- plan$blocks[[i]]
+    v <- if (is.function(b$def$breakpoints)) b$def$breakpoints(t0, tf)
+    v[v > t0 & v < tf]
+  })
+  sched_times <- lapply(sched, function(e) {
+    v <- e$trigger$times
+    v[v >= t0 - tol & v <= tf + tol]
+  })
+  all_t <- c(t0, tf, unlist(ticks), unlist(sched_times), unlist(bp_list))
+  kind <- c(0L, 0L, rep(1L, length(unlist(ticks))), rep(2L, length(unlist(sched_times))),
+            rep(3L, length(unlist(bp_list))))
+  who <- c(0L, 0L, rep(seq_along(ticks), lengths(ticks)),
+           rep(seq_along(sched_times), lengths(sched_times)),
+           rep(seq_along(bp_list), lengths(bp_list)))
+  mg <- merge_groups(all_t, tol)
+  bounds <- mg$rep
+  # the groups of t0 and tf are the end points themselves
+  bounds[mg$group[1]] <- t0
+  bounds[mg$group[2]] <- tf
+  if (mg$group[1] == mg$group[2]) {
+    sim_abort("`tspan` is too short to be resolved in double precision.")
   }
-  sched_at <- vector("list", length(bounds))
-  for (e in names(sched)) {
-    for (i in stats::na.omit(near(sched[[e]]$trigger$times))) sched_at[[i]] <- c(sched_at[[i]], e)
+  tick_at <- sched_at <- bp_at <- vector("list", length(bounds))
+  for (k in which(kind == 1L)) tick_at[[mg$group[k]]] <- c(tick_at[[mg$group[k]]], who[k])
+  for (k in which(kind == 2L)) {
+    sched_at[[mg$group[k]]] <- c(sched_at[[mg$group[k]]], names(sched)[who[k]])
   }
+  for (k in which(kind == 3L)) bp_at[[mg$group[k]]] <- c(bp_at[[mg$group[k]]], who[k])
+  tick_at <- lapply(tick_at, unique)
+  sched_at <- lapply(sched_at, unique)
   rec_times <- times
   if (include_ticks && length(ticks)) {
-    tk <- unlist(ticks)
-    tk <- tk[tk >= t0 - tol & tk <= tf + tol]
+    # a hit is recorded at its boundary, the instant where it takes effect
+    tk <- bounds[vapply(tick_at, length, 0L) > 0L]
     extra <- unique(tk[is.na(match_tol(tk, rec_times, tol))])
     rec_times <- sort(c(rec_times, extra))
   }
@@ -226,8 +241,9 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
   dummy <- plan$nx == 0L && nzc > 0L
 
   rows <- list()
-  add_row <- function(t, x, d, held, kind) {
-    rows[[length(rows) + 1L]] <<- list(t = t, x = x, d = d, held = held, kind = kind)
+  add_row <- function(t, x, d, held, kind, loop = NULL) {
+    rows[[length(rows) + 1L]] <<- list(t = t, x = x, d = d, held = held, kind = kind,
+                                       loop = loop)
   }
   ev_log <- list()
   log_event <- function(t, name, type, source, direction = NA_character_) {
@@ -246,6 +262,7 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
   nev <- 0L
   restarts <- 0L
   stuck <- 0L
+  resting <- logical(nzc)  # functions on their level that the probe saw stay
   root <- NULL     # crossings located by the solver at t
   g_end <- NULL    # crossing functions at the left limit of t
   g_seg0 <- NULL   # and at the start of the segment that ended at t
@@ -264,36 +281,54 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
   #   1. block handlers of crossings located by the solver;
   #   2. model events due now, in increasing priority then name: scheduled
   #      events, located crossings and crossings caused by a jump of a
-  #      signal at t; each sees the state left by the one before;
-  #   3. sample hits (outputs, then updates), then the modes of switching
-  #      blocks;
-  #   4. crossings caused by steps 2 and 3, in further layers, each layer
-  #      compared with the values before it, until no new crossing occurs;
-  #   5. crossing functions that sit on their level and move off it in the
-  #      trigger direction (found with a short probe integration), then
-  #      step 4 again.
-  # A terminal event ends the run after the instant is settled.
+  #      signal at t (including jumps made by step 1); each sees the state
+  #      left by the one before;
+  #   3. sample hits: modes brought up to date with the state after step 2,
+  #      outputs held, updates, then the modes again;
+  #   4. events whose function was carried across its level by any single
+  #      handler, sample hit or mode change above, in further layers, until
+  #      no new crossing occurs;
+  #   5. block handlers and events whose function sits on its level and
+  #      moves off it in the trigger direction (found with short probe
+  #      integrations), then step 4 again.
+  # A terminal event ends the run after the instant is settled; every
+  # handler execution counts toward max_events.
   instant <- function() {
     fired_ev <- character()
     fired_blk <- character()
     out <- list(terminal = FALSE, limit = FALSE, fired = FALSE, silent = FALSE)
     pre_done <- FALSE
+    pending <- character()
+    tick_loop <- NULL
     note_pre <- function() {
       if (!pre_done) add_row(t, x, d, held, "pre-event")
       pre_done <<- TRUE
       out$fired <<- TRUE
     }
-    count <- function() {
-      nev <<- nev + 1L
-      if (nev >= max_events) out$limit <<- TRUE
+    g_here <- function() zero_crossings(plan, t, x, d, evaluate(plan, t, x, d, held)$sig)
+    # events carried across their level between crossing values a and b
+    add_crossings <- function(a, b, excl = character()) {
+      for (e in zc_events) {
+        if (e$name %in% excl) next
+        dir <- cross_direction(a[e$zc_index], b[e$zc_index], zc_tol)
+        if (!is.na(dir) && want_ok(e$trigger$direction, dir)) pending[e$name] <<- dir
+      }
+    }
+    budget_left <- function() {
+      if (nev >= max_events) {
+        out$limit <<- TRUE
+        return(FALSE)
+      }
+      TRUE
     }
     run_events <- function(cand) {
       # cand: named character vector of directions (NA for scheduled)
       if (!length(cand)) return(character())
       cand <- cand[order(match(names(cand), names(plan$events)))]
       done <- character()
+      g_cur <- g_here()
       for (en in names(cand)) {
-        if (out$limit) break
+        if (!budget_left()) break
         e <- plan$events[[en]]
         note_pre()
         st <- apply_event_resets(plan, e, t, x, d, held)
@@ -304,31 +339,53 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
                   if (sched) "model" else e$trigger$signal, cand[[en]])
         if (e$terminal) out$terminal <<- TRUE
         done <- c(done, en)
-        count()
+        nev <<- nev + 1L
+        g_new <- g_here()
+        # an event does not retrigger itself from the layer it fired in
+        add_crossings(g_cur, g_new, excl = names(cand))
+        g_cur <- g_new
       }
       fired_ev <<- c(fired_ev, done)
       done
     }
     run_block <- function(b, j, dir, sig) {
+      if (out$limit) return(FALSE)
       r <- b$def$on_zc(j, dir, t, x[b$x_idx], d[b$d_idx], block_inputs(b, sig))
       if (isTRUE(r$silent)) {
         out$silent <<- TRUE
         return(FALSE)
       }
       xn <- x; dn <- d
+      for (f in c("d", "x")) {
+        n_want <- length(b[[paste0(f, "_idx")]])
+        if (!is.null(r[[f]]) && (!is.numeric(r[[f]]) || length(r[[f]]) != n_want)) {
+          sim_abort("Block '", b$name, "' on_zc returned `", f, "` of length ",
+                    length(r[[f]]), ", expected ", n_want, " number(s).")
+        }
+      }
       if (!is.null(r$d)) dn[b$d_idx] <- r$d
       if (!is.null(r$x)) xn[b$x_idx] <- r$x
       if (identical(xn, x) && identical(dn, d) && !isTRUE(r$terminal)) return(FALSE)
+      if (!budget_left()) return(FALSE)
       check_states(plan, xn, dn, d_inf_ok, paste0("Block '", b$name, "'"))
       note_pre()
+      g_a <- g_here()
       x <<- xn; d <<- dn
+      add_crossings(g_a, g_here())
       if (isTRUE(r$terminal)) out$terminal <<- TRUE
       log_event(t, b$name, if (isTRUE(r$terminal)) "stop" else "block", b$name, dir)
       fired_blk <<- c(fired_blk, paste(b$name, j))
-      count()
+      nev <<- nev + 1L
       TRUE
     }
     want_ok <- function(want, dir) want == "either" || dir == want || dir == "either"
+    refresh_modes <- function() {
+      g_a <- g_here()
+      ev <- evaluate(plan, t, x, d, held, NULL, refresh = TRUE)
+      d <<- ev$d
+      add_crossings(g_a, g_here())
+      ev
+    }
 
     # 1. located crossings
     cand <- character()
@@ -355,6 +412,11 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
         }
         if (back$g[k] < g[k]) "rising" else if (back$g[k] > g[k]) "falling" else "either"
       }
+      for (e in zc_events) {
+        if (!e$zc_index %in% root$which) next
+        dir <- dir_of(e$zc_index)
+        if (want_ok(e$trigger$direction, dir)) cand[e$name] <- dir
+      }
       for (i in plan$zc$blocks) {
         b <- plan$blocks[[i]]
         comps <- plan$zc$block_idx[[i]]
@@ -366,30 +428,28 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
           if (run_block(b, j, dir, sig)) sig <- evaluate(plan, t, x, d, held)$sig
         }
       }
-      for (e in zc_events) {
-        if (!e$zc_index %in% root$which) next
-        dir <- dir_of(e$zc_index)
-        if (want_ok(e$trigger$direction, dir)) cand[e$name] <- dir
-      }
     }
     # 2. model events due now
     if (at_boundary) for (en in sched_at[[bi]]) cand[en] <- NA_character_
-    sig <- evaluate(plan, t, x, d, held)$sig
-    g_ref <- zero_crossings(plan, t, x, d, sig)
     if (at_boundary && !is.null(g_end)) {
+      g_ref <- g_here()
       for (e in zc_events) {
-        if (e$name %in% names(cand)) next
         k <- e$zc_index
         dir <- jump_direction(g_end[k], g_seg0[k], g_ref[k], zc_tol)
-        if (!is.na(dir) && want_ok(e$trigger$direction, dir)) cand[e$name] <- dir
+        if (!is.na(dir) && want_ok(e$trigger$direction, dir)) pending[e$name] <- dir
       }
     }
-    excl <- run_events(cand)
+    for (en in setdiff(names(pending), names(cand))) cand[en] <- pending[[en]]
+    pending <- character()
+    run_events(cand)
     # 3. sample hits and modes
     if (at_boundary && length(tick_at[[bi]])) {
+      g_a <- g_here()
       ticking <- plan$rates$block_rate %in% tick_at[[bi]] &
         vapply(plan$blocks, `[[`, TRUE, "discrete")
       ev <- evaluate(plan, t, x, d, held, ticking, refresh = TRUE)
+      # the loop statistics of the solve at the hit, kept for the record
+      tick_loop <- ev$loop
       d <<- ev$d
       for (i in which(ticking)) {
         idx <- unlist(plan$blocks[[i]]$out_idx)
@@ -409,48 +469,64 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
       }
       check_states(plan, x, dnew, d_inf_ok, "A sample update")
       d <<- dnew
+      add_crossings(g_a, g_here())
     }
-    ev <- evaluate(plan, t, x, d, held, NULL, refresh = TRUE)
-    d <<- ev$d
+    ev <- refresh_modes()
     # 4. and 5. cascades and departures
+    resting <<- logical(nzc)
     probes <- 0L
     repeat {
       layers <- 0L
-      repeat {
-        if (out$limit) break
-        g_now <- zero_crossings(plan, t, x, d, ev$sig)
-        cand <- character()
-        for (e in zc_events) {
-          if (e$name %in% excl) next
-          dir <- cross_direction(g_ref[e$zc_index], g_now[e$zc_index], zc_tol)
-          if (!is.na(dir) && want_ok(e$trigger$direction, dir)) cand[e$name] <- dir
-        }
-        if (!length(cand)) break
+      while (length(pending) && !out$limit) {
         layers <- layers + 1L
         if (layers > max_events) {
           out$limit <- TRUE
           break
         }
-        excl <- run_events(cand)
-        g_ref <- g_now
-        ev <- evaluate(plan, t, x, d, held, NULL, refresh = TRUE)
-        d <<- ev$d
+        cand <- pending
+        pending <- character()
+        run_events(cand)
+        ev <- refresh_modes()
       }
-      if (out$limit || out$terminal || t >= tf - tol || !nzc || probes >= 10L) break
+      if (out$limit || t >= tf - tol || !nzc) break
       g <- zero_crossings(plan, t, x, d, ev$sig)
-      on_level <- abs(g) <= zc_tol & c(strict_zc, rep(TRUE, length(zc_events)))
+      level_any <- abs(g) <= zc_tol & c(strict_zc, rep(TRUE, length(zc_events)))
+      on_level <- level_any
       for (e in zc_events) if (e$name %in% fired_ev) on_level[e$zc_index] <- FALSE
       for (i in plan$zc$blocks) {
         comps <- plan$zc$block_idx[[i]]
         hit <- paste(plan$blocks[[i]]$name, seq_along(comps)) %in% fired_blk
         on_level[comps[hit]] <- FALSE
       }
-      if (!any(on_level)) break
+      resting <<- logical(nzc)
+      if (!any(level_any)) break
       probes <- probes + 1L
-      gf <- departure_probe(plan, t, bounds[bi + 1L], x, d, held, ode_probe)
-      dg <- gf - g
+      if (probes > max_events) {
+        out$limit <- TRUE
+        break
+      }
+      dg <- departure_probe(plan, t, bounds[bi + 1L], x, d, held, ode_probe, hmax,
+                            bp_at[[bi + 1L]], g)
+      resting <<- level_any & dg == 0
       dir_of <- function(k) if (dg[k] > 0) "rising" else if (dg[k] < 0) "falling" else NA
       moved <- FALSE
+      # blocks whose input rests on a level take their mode for the plateau
+      for (i in plan$zc$blocks) {
+        b <- plan$blocks[[i]]
+        if (!is.function(b$def$on_rest)) next
+        comps <- plan$zc$block_idx[[i]]
+        for (j in seq_along(comps)) {
+          if (!resting[comps[j]]) next
+          r <- b$def$on_rest(j, t, x[b$x_idx], d[b$d_idx], block_inputs(b, ev$sig))
+          if (!is.null(r$d) && !identical(as.numeric(r$d), d[b$d_idx])) {
+            g_a <- g_here()
+            d[b$d_idx] <<- r$d
+            add_crossings(g_a, g_here())
+            ev <- evaluate(plan, t, x, d, held, NULL)
+            moved <- TRUE
+          }
+        }
+      }
       for (i in plan$zc$blocks) {
         b <- plan$blocks[[i]]
         comps <- plan$zc$block_idx[[i]]
@@ -471,21 +547,22 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
           cand[e$name] <- dir_of(k)
         }
       }
-      excl <- run_events(cand)
-      if (!moved && !length(excl)) break
-      g_ref <- g
-      ev <- evaluate(plan, t, x, d, held, NULL, refresh = TRUE)
-      d <<- ev$d
+      done <- run_events(cand)
+      if (!moved && !length(done)) break
+      resting <<- logical(nzc)
+      ev <- refresh_modes()
     }
     for (b in plan$blocks) {
-      if (is.function(b$def$stop_if) &&
-          isTRUE(b$def$stop_if(t, x[b$x_idx], d[b$d_idx], block_inputs(b, ev$sig)))) {
+      if (!is.function(b$def$stop_if)) next
+      if (any(startsWith(fired_blk, paste0(b$name, " ")))) next
+      if (isTRUE(b$def$stop_if(t, x[b$x_idx], d[b$d_idx], block_inputs(b, ev$sig)))) {
+        note_pre()
         log_event(t, b$name, "stop", b$name)
         out$terminal <- TRUE
       }
     }
-    if (out$fired || out$terminal || any(abs(rec_times - t) <= tol)) {
-      add_row(t, x, d, held, if (out$fired) "post-event" else "sample")
+    if (out$fired || out$terminal || !is.na(match_tol(t, rec_times, tol))) {
+      add_row(t, x, d, held, if (out$fired) "post-event" else "sample", tick_loop)
     }
     out
   }
@@ -513,21 +590,25 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
       }
     }
     root <- NULL; g_end <- NULL; g_seg0 <- NULL
-    if (inst$terminal) {
-      status <- "terminated"
-      message <- paste0("stopped by a terminal event at t = ", format(t))
-      break
-    }
     if (inst$limit) {
       status <- "event_limit"
       message <- paste0("reached max_events = ", max_events, " at t = ", format(t),
                         "; the model may be chattering or Zeno")
       break
     }
+    if (inst$terminal) {
+      status <- "terminated"
+      message <- paste0("stopped by a terminal event at t = ", format(t))
+      break
+    }
     if (t >= tf - tol) break
 
     tn <- bounds[bi + 1L]
-    inner <- rec_times[rec_times > t + tol & rec_times < tn - tol]
+    # requested times strictly inside the segment, found by bisection
+    lo <- findInterval(t + tol, rec_times) + 1L
+    hi <- findInterval(tn - tol, rec_times, left.open = TRUE)
+    inner <- if (hi >= lo) rec_times[lo:hi] else numeric()
+    inner <- inner[inner > t + tol & inner < tn - tol]
     if (plan$nx == 0L && !dummy) {
       for (tt in inner) add_row(tt, x, d, held, "sample")
       t <- tn; bi <- bi + 1L; at_boundary <- TRUE
@@ -535,7 +616,8 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
     }
 
     seg <- integrate_segment(plan, t, tn, inner, x, d, held, dummy, method,
-                             rtol, atol, maxsteps, zc_tol, nzc, ode_args, tol)
+                             rtol, atol, maxsteps, zc_tol, nzc, ode_args, tol,
+                             left = bp_at[[bi + 1L]], resting = resting)
     stats_acc <- add_stats(stats_acc, seg$stats)
     warnings <- unique(c(warnings, seg$warnings))
     for (k in seq_along(seg$times)) add_row(seg$times[k], seg$x[k, ], d, held, "sample")
@@ -556,6 +638,13 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
     x <- seg$root$x
     root <- list(which = seg$root$which, g_start = seg$g_start, t_start = t)
     if (abs(tr - tn) <= tol) {
+      # the root and the boundary are one instant; carry the states over
+      # the (at most tol) gap so the boundary row is consistent with its time
+      if (tn != tr && plan$nx) {
+        sig_r <- evaluate(plan, tr, x, d, held, t_left = left_of(t, tn),
+                          left = bp_at[[bi + 1L]])$sig
+        x <- x + (tn - tr) * derivatives(plan, tr, x, d, sig_r)
+      }
       t <- tn; bi <- bi + 1L; at_boundary <- TRUE
     } else {
       t <- tr; at_boundary <- FALSE; g_end <- NULL
@@ -608,20 +697,21 @@ apply_initial <- function(plan, initial, x, d) {
 }
 
 integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
-                              rtol, atol, maxsteps, zc_tol, nzc, ode_args, tol) {
+                              rtol, atol, maxsteps, zc_tol, nzc, ode_args, tol,
+                              left = integer(), resting = logical()) {
   y0 <- if (dummy) 0 else x
   xs <- function(y) if (dummy) numeric() else y
   # Inside a segment, sources with breakpoints take their left limit at the
   # end point: a source that jumps at tn must not leak its next value into
   # this segment when the solver evaluates the right-hand side exactly at
   # tn. All other blocks see the true solver time.
-  t_left <- tn - 4 * .Machine$double.eps * max(1, abs(tn))
+  t_left <- left_of(t, tn)
   # The solver runs on time since the segment start, tau in [0, L], so the
   # length it integrates is exact even when t is far from zero (at t = 1e9
   # one unit in the last place is 1.2e-7). Blocks see the absolute time.
   L <- tn - t
   at <- function(tau) if (tau >= L) tn else t + tau
-  signals_at <- function(tau, y) evaluate(plan, at(tau), xs(y), d, held, t_left = t_left)$sig
+  signals_at <- function(tau, y) evaluate(plan, at(tau), xs(y), d, held, t_left = t_left, left = left)$sig
   func <- function(tau, y, parms) {
     sig <- signals_at(tau, y)
     list(if (dummy) 0 else derivatives(plan, at(tau), y, d, sig))
@@ -634,7 +724,8 @@ integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
   g0 <- NULL
   if (nzc) {
     g0 <- zero_crossings(plan, t, x, d, evaluate(plan, t, x, d, held)$sig)
-    at0 <- abs(g0) <= zc_tol
+    if (length(resting) != length(g0)) resting <- logical(length(g0))
+    at0 <- abs(g0) <= zc_tol & !resting
     off <- ifelse(at0, g0, 0)
     args$rootfunc <- function(tau, y, parms) {
       xx <- xs(y)
@@ -645,6 +736,9 @@ integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
       # zero as positive; at the start itself keep the zero, so the root
       # finder takes its reference sign from the first step.
       if (tau > 0) v[at0 & v == 0] <- 1
+      # a function resting on its level is watched for leaving it in
+      # either direction: |g| grows past zc_tol
+      if (any(resting)) v[resting] <- abs(v[resting]) - zc_tol
       v
     }
   }
@@ -677,7 +771,8 @@ integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
   tt <- vapply(tau, at, 0)
   hit <- match(tau, inner_local)
   tt[!is.na(hit)] <- inner[hit[!is.na(hit)]]
-  keep <- which(!is.na(hit) & (if (is_root) tau < troot[1] else TRUE))
+  # output times at the root instant itself belong to the instant's rows
+  keep <- which(!is.na(hit) & (if (is_root) tt < tt[last] - tol else TRUE))
   res <- list(times = tt[keep], x = ymat[keep, , drop = FALSE], stats = stats,
               warnings = warns)
   if (!all(is.finite(ymat))) {
@@ -704,14 +799,14 @@ integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
     if (abs(tt[last] - tn) <= tol) {
       xe <- xs(ymat[last, ])
       res$g_end <- zero_crossings(plan, tn, xe, d,
-                                  evaluate(plan, tn, xe, d, held, t_left = t_left)$sig)
+                                  evaluate(plan, tn, xe, d, held, t_left = t_left, left = left)$sig)
     }
   } else {
     res$x_end <- ymat[last, ]
     if (nzc) {
       xe <- xs(res$x_end)
       res$g_end <- zero_crossings(plan, tn, xe, d,
-                                  evaluate(plan, tn, xe, d, held, t_left = t_left)$sig)
+                                  evaluate(plan, tn, xe, d, held, t_left = t_left, left = left)$sig)
     }
   }
   res$g_start <- g0
@@ -731,39 +826,72 @@ cross_direction <- function(a, b, zc_tol) {
 }
 
 # Crossing across a segment boundary: g_end is the left limit, g_start the
-# value at the start of the segment, g the value at the boundary. A
-# function that arrived exactly at its level at the boundary crosses there
-# in the direction it came from.
+# value at the start of the segment, g the value at the boundary. Reaching
+# the level, leaving it and jumping across it all count; a function that
+# rested on its level through the segment and jumps off it departs in the
+# direction of the jump. A function that arrived at its level at the end of
+# the segment crosses in the direction it came from.
 jump_direction <- function(g_end, g_start, g, zc_tol) {
-  a <- if (abs(g_end) > zc_tol) sign(g_end) else
-    if (abs(g_start) > zc_tol && abs(g) <= zc_tol) sign(g_start) else 0
-  b <- if (abs(g) > zc_tol) sign(g) else if (a != 0 && abs(g_end) <= zc_tol) -a else 0
-  if (a == 0 || b == 0 || a == b) return(NA_character_)
-  if (b > 0) "rising" else "falling"
+  side <- function(v) if (abs(v) > zc_tol) sign(v) else 0
+  a <- side(g_end); b <- side(g)
+  dir <- function(up) if (up) "rising" else "falling"
+  if (a != 0) {
+    if (b == a) return(NA_character_)
+    return(dir(if (b == 0) a < 0 else b > 0))
+  }
+  s0 <- side(g_start)
+  if (s0 != 0) {
+    # arrived at the level during the segment
+    if (b == s0) return(NA_character_)
+    return(dir(s0 < 0))
+  }
+  if (b == 0) NA_character_ else dir(b > 0)
 }
 
-# Crossing functions a short way into the coming segment, for functions that
-# sit on their level now. The states are integrated (not extrapolated), so
-# a function whose first derivative vanishes, such as x = t^2, is still seen
-# to move. The probe covers 1/1000 of the segment: a function that leaves
-# its level and returns within that span is not detected.
-departure_probe <- function(plan, t, tn, x, d, held, ode_args) {
-  h <- (tn - t) / 1000
-  th <- t + h
-  t_left <- tn - 4 * .Machine$double.eps * max(1, abs(tn))
-  xf <- x
+# Change of the crossing functions just after t, for functions that sit on
+# their level now. The states are integrated (not extrapolated), so a
+# function whose first derivative vanishes, such as x = t^3, is still seen
+# to move. The probe looks at a ladder of short times, from 1e-8 of the
+# largest step up to 1/1000 of the coming segment (or hmax), plus the
+# shortest step that changes t at all; for each function it keeps the
+# change at the shortest time where the function has moved, so a later
+# reversal does not hide the direction it leaves in. Returns 0 where the
+# function did not move.
+departure_probe <- function(plan, t, tn, x, d, held, ode_args, hmax, left, g) {
+  H <- (tn - t) / 1000
+  if (!is.null(hmax)) H <- min(H, hmax)
+  s_min <- 2 * .Machine$double.eps * abs(t)
+  hs <- H * 10^(-8:0)
+  hs <- hs[hs > s_min]
+  if (s_min > 0 && s_min <= (tn - t) / 2) hs <- c(hs, s_min)
+  if (!length(hs)) hs <- (tn - t) / 2
+  hs <- sort(unique(hs))
+  t_left <- left_of(t, tn)
+  xs <- matrix(x, length(hs), length(x), byrow = TRUE)
   if (plan$nx) {
     # local time, as in integrate_segment()
     func <- function(tau, y, parms) {
       tt <- t + tau
-      list(derivatives(plan, tt, y, d, evaluate(plan, tt, y, d, held, t_left = t_left)$sig))
+      list(derivatives(plan, tt, y, d, evaluate(plan, tt, y, d, held, t_left = t_left,
+                                                left = left)$sig))
     }
-    out <- suppressWarnings(do.call(deSolve::ode, c(list(y = x, times = c(0, h), func = func,
+    out <- suppressWarnings(do.call(deSolve::ode, c(list(y = x, times = c(0, hs), func = func,
                                                           parms = NULL), ode_args)))
-    xf <- out[nrow(out), -1L]
-    if (nrow(out) < 2L || !all(is.finite(xf))) sim_abort("the departure probe failed.")
+    if (nrow(out) < length(hs) + 1L || !all(is.finite(out[, -1L]))) {
+      sim_abort("the departure probe failed.")
+    }
+    xs <- out[-1L, -1L, drop = FALSE]
   }
-  zero_crossings(plan, th, xf, d, evaluate(plan, th, xf, d, held, t_left = t_left)$sig)
+  dg <- numeric(length(g))
+  for (i in seq_along(hs)) {
+    th <- t + hs[i]
+    gi <- zero_crossings(plan, th, xs[i, ], d,
+                         evaluate(plan, th, xs[i, ], d, held, t_left = t_left, left = left)$sig)
+    todo <- dg == 0 & gi != g
+    dg[todo] <- (gi - g)[todo]
+    if (all(dg != 0)) break
+  }
+  dg
 }
 
 # Discrete states that may hold -Inf: those a block declares with
@@ -803,6 +931,13 @@ apply_event_resets <- function(plan, e, t, x, d, held, sig = NULL) {
   if (!length(e$resets)) return(list(x = x, d = d))
   if (is.null(sig)) sig <- evaluate(plan, t, x, d, held)$sig
   s <- signal_list(plan, sig)
+  if (nzchar(e$prefix %||% "")) {
+    # inside a subsystem instance its own signals go by their local names
+    loc <- names(s)[startsWith(names(s), e$prefix)]
+    s_loc <- s[loc]
+    names(s_loc) <- substring(loc, nchar(e$prefix) + 1L)
+    s <- c(s_loc, s[setdiff(names(s), names(s_loc))])
+  }
   for (r in e$resets) {
     cur <- if (r$kind == "x") x[r$idx] else d[r$idx]
     v <- as.numeric(r$fun(cur, s, t))

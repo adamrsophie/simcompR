@@ -63,9 +63,19 @@ check_sample_time <- function(period, offset, what) {
 # offset + k * period and the breakpoints of sources are within a few units
 # of the exact value, so equal instants meet; distinct sample hits are a
 # whole period apart, and sim_run() refuses periods that are not far above
-# this tolerance, so distinct hits are never merged.
+# this tolerance, so distinct hits are never merged. It scales with the
+# times themselves (no floor of 1), so a span such as c(0, 1e-15) keeps its
+# end points apart.
 time_tol <- function(tspan) {
-  16 * .Machine$double.eps * max(1, abs(tspan))
+  16 * .Machine$double.eps * max(abs(tspan), .Machine$double.xmin)
+}
+
+# A time strictly inside (t, tn), as close to tn as rounding allows: where a
+# block that jumps at tn shows its value from the left.
+left_of <- function(t, tn) {
+  delta <- 4 * .Machine$double.eps * abs(tn)
+  if (!(delta > 0)) delta <- (tn - t) * 1e-12
+  tn - min(delta, (tn - t) / 2)
 }
 
 # R binds a named argument to a formal by partial matching when no formal
@@ -109,25 +119,31 @@ exact_match_args <- function(call, formal_names, env) {
   list(fixed = fixed, dots = dots)
 }
 
-# Merge sorted times that agree within tol. A cluster starts at its first
-# time and never extends beyond tol from it, so close times cannot chain
-# together. The cluster is represented by its largest time: a sample hit
+# Group times that agree within tol. A group starts at its smallest time
+# and never extends beyond tol from it, so close times cannot chain
+# together. Each group is represented by its largest time: a sample hit
 # computed as 0.8999999999999999 and a step at 0.9 meet at 0.9, where the
-# step has already switched.
-merge_times <- function(times, tol) {
-  times <- sort(unique(times))
-  if (length(times) < 2L) return(times)
-  out <- numeric()
+# step has already switched. Returns the representatives (sorted) and, for
+# every input time, the index of its group, so that callers place each time
+# in its own group instead of the nearest representative.
+merge_groups <- function(times, tol) {
+  n <- length(times)
+  if (!n) return(list(rep = numeric(), group = integer()))
+  o <- order(times)
+  st <- times[o]
+  starts <- logical(n)
   start <- -Inf
-  for (v in times) {
-    if (v - start > tol) {
-      out <- c(out, v)
-      start <- v
-    } else {
-      out[length(out)] <- v
+  for (i in seq_len(n)) {
+    if (st[i] - start > tol) {
+      starts[i] <- TRUE
+      start <- st[i]
     }
   }
-  out
+  gid <- cumsum(starts)
+  group <- integer(n)
+  group[o] <- gid
+  ends <- c(which(starts)[-1L] - 1L, n)
+  list(rep = st[ends], group = group)
 }
 
 # Index of the element of sorted `ref` within tol of each value, else NA.

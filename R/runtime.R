@@ -57,7 +57,7 @@ eval_block <- function(b, t, x, d, sig) {
 #
 # Returns list(sig, d, loop) where loop records algebraic loop residuals.
 evaluate <- function(plan, t, x, d, held, ticking = NULL, refresh = FALSE,
-                     t_left = Inf) {
+                     t_left = Inf, left = integer()) {
   if (refresh && any(vapply(plan$blocks, `[[`, TRUE, "has_modes"))) {
     # Modes are recomputed from fully evaluated signals, never from a
     # partially filled signal vector, and repeated until they settle, so the
@@ -84,21 +84,56 @@ evaluate <- function(plan, t, x, d, held, ticking = NULL, refresh = FALSE,
       if (item$skip) next
       if (item$discrete && (is.null(ticking) || !ticking[item$blocks])) next
       b <- blocks[[item$blocks]]
-      # sources with breakpoints show their left limit at a segment's end
-      tb <- if (item$has_bp && t > t_left) t_left else t
+      # a block that jumps at the segment's end shows its left limit there
+      tb <- if (t > t_left && item$blocks %in% left) t_left else t
       sig <- eval_block(b, tb, x, d, sig)
       next
     }
-    res <- solve_loop(plan, item, t, x, d, sig, ticking)
+    res <- solve_loop(plan, item, t, x, d, sig, ticking, t_left, left)
     sig <- res$sig
     loop_info <- rbind(loop_info, c(residual = res$residual, iterations = res$iterations))
   }
   list(sig = sig, d = d, loop = loop_info)
 }
 
+# Evaluation order of the active blocks of a loop when their direct
+# feedthrough dependencies form no cycle, else NULL.
+active_order <- function(blocks, active) {
+  k_act <- which(active)
+  if (length(k_act) == length(blocks)) return(NULL)
+  owner <- integer()
+  for (k in k_act) {
+    idx <- unlist(blocks[[k]]$out_idx)
+    owner[as.character(idx)] <- k
+  }
+  deps <- lapply(seq_along(blocks), function(k) {
+    if (!active[k]) return(integer())
+    ft <- blocks[[k]]$def$feedthrough
+    src <- unlist(blocks[[k]]$in_idx[ft])
+    setdiff(unique(stats::na.omit(owner[as.character(src)])), k)
+  })
+  self <- vapply(k_act, function(k) {
+    ft <- blocks[[k]]$def$feedthrough
+    any(unlist(blocks[[k]]$in_idx[ft]) %in% unlist(blocks[[k]]$out_idx))
+  }, TRUE)
+  if (any(self)) return(NULL)
+  ord <- integer()
+  todo <- k_act
+  while (length(todo)) {
+    ready <- todo[vapply(todo, function(k) all(deps[[k]] %in% ord), TRUE)]
+    if (!length(ready)) return(NULL)
+    ord <- c(ord, ready)
+    todo <- setdiff(todo, ready)
+  }
+  ord
+}
+
 # Newton iteration on the outputs z of one algebraic loop: z = F(z).
-solve_loop <- function(plan, item, t, x, d, sig, ticking) {
+solve_loop <- function(plan, item, t, x, d, sig, ticking, t_left = Inf, left = integer()) {
   blocks <- plan$blocks[item$blocks]
+  # time seen by each block: the left limit for blocks that jump at the
+  # segment's end, as outside loops
+  tk <- ifelse(t > t_left & item$blocks %in% left, t_left, t)
   zi <- item$z_idx
   active <- vapply(item$blocks, function(i) {
     b <- plan$blocks[[i]]
@@ -107,13 +142,24 @@ solve_loop <- function(plan, item, t, x, d, sig, ticking) {
   # outputs of sampled blocks between their hits are held, not unknowns
   zi <- unlist(lapply(blocks[active], function(b) unlist(b$out_idx)))
   if (!length(zi)) return(list(sig = sig, residual = 0, iterations = 0L))
+  # with held outputs known, the remaining blocks may not form a cycle at
+  # all; then they are evaluated in order, without Newton iteration
+  ord <- active_order(blocks, active)
+  if (!is.null(ord)) {
+    s <- sig
+    for (k in ord) {
+      s <- write_outputs(blocks[[k]], blocks[[k]]$def$output(
+        tk[k], x[blocks[[k]]$x_idx], d[blocks[[k]]$d_idx], block_inputs(blocks[[k]], s)), s)
+    }
+    return(list(sig = s, residual = 0, iterations = 0L))
+  }
   F <- function(z) {
     s <- sig
     s[zi] <- z
     out <- s
     for (k in seq_along(blocks)) {
       if (active[k]) out <- write_outputs(blocks[[k]], blocks[[k]]$def$output(
-        t, x[blocks[[k]]$x_idx], d[blocks[[k]]$d_idx], block_inputs(blocks[[k]], s)), out)
+        tk[k], x[blocks[[k]]$x_idx], d[blocks[[k]]$d_idx], block_inputs(blocks[[k]], s)), out)
     }
     out[zi] - z
   }
