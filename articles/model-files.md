@@ -34,8 +34,11 @@ identical(r1$signals, r2$signals)
 #> [1] TRUE
 ```
 
-The results are bit-for-bit identical because numbers are stored with 17
-significant digits and matrices keep their dimensions.
+The results are bit-for-bit identical because every number is stored in
+a form that reads back to the same double: a short decimal such as
+`"0.1"` where that is exact, and the hexadecimal form of C99
+(`"0x1.5555555555555p-2"` for 1/3) otherwise. Matrices keep their
+dimensions and storage type.
 
 ## The format
 

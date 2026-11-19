@@ -127,8 +127,11 @@ read.</p>
 <span><span class="va">r2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">m2</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">5</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">r1</span><span class="op">$</span><span class="va">signals</span>, <span class="va">r2</span><span class="op">$</span><span class="va">signals</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] TRUE</span></span></code></pre></div>
-<p>The results are bit-for-bit identical because numbers are stored with
-17 significant digits and matrices keep their dimensions.</p>
+<p>The results are bit-for-bit identical because every number is stored
+in a form that reads back to the same double: a short decimal such as
+<code>"0.1"</code> where that is exact, and the hexadecimal form of C99
+(<code>"0x1.5555555555555p-2"</code> for 1/3) otherwise. Matrices keep
+their dimensions and storage type.</p>
 </div>
 <div class="section level2">
 <h2 id="the-format">The format<a class="anchor" aria-label="anchor" href="#the-format"></a>

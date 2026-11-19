@@ -63,10 +63,11 @@ interpolates more output points.
 Any method of
 [`deSolve::ode()`](https://rdrr.io/pkg/deSolve/man/ode.html) that can be
 told to stop at given times can be used, which is every method except
-`"radau"`. Models with zero crossings need a root-finding method:
-`"lsoda"`, `"lsode"`, `"lsodes"` or `"lsodar"`. The default is
-`"lsoda"`, which switches automatically between stiff and nonstiff
-methods. Tolerances are `rtol = 1e-6` and `atol = 1e-8` by default.
+`"radau"` and `"iteration"`. Models with zero crossings need a
+root-finding method: `"lsoda"`, `"lsode"`, `"lsodes"` or `"lsodar"`. The
+default is `"lsoda"`, which switches automatically between stiff and
+nonstiff methods. Tolerances are `rtol = 1e-6` and `atol = 1e-8` by
+default.
 
 ``` r
 

@@ -168,7 +168,11 @@ given to <code><a href="sim_run.html">sim_run()</a></code>).</p></li>
 <li><p><code>zc(t, x, d, u)</code> and <code>on_zc(i, direction, t, x, d, u)</code>: zero-crossing
 functions and their handler, which returns <code>list(d = , x = , terminal = )</code>.
 <code>zc_direction</code> gives one of <code>"rising"</code>, <code>"falling"</code>, <code>"either"</code> per
-component.</p></li>
+component. The lengths of <code>d</code> and <code>x</code> must match the block's states.</p></li>
+<li><p><code>on_rest(i, t, x, d, u)</code>: optional; called when crossing function <code>i</code>
+sits on its level and stays there (a plateau), returning <code>list(d = )</code>
+for the mode on the plateau. The <code>switch</code> block uses it to apply its
+criterion at equality.</p></li>
 <li><p><code>breakpoints(t0, tf)</code>: times where the block's output is
 discontinuous; the integrator restarts there.</p></li>
 <li><p><code>modes(t, x, d, u)</code>: for switching blocks whose output branch is

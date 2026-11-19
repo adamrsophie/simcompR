@@ -118,7 +118,7 @@ z <- suppressWarnings(sim_run(sim_compile(ball), c(0, 20), max_events = 30))
 z$status
 #> [1] "event_limit"
 z$message
-#> [1] "reached max_events = 30 at t = 5.739052; the model may be chattering or Zeno"
+#> [1] "reached max_events = 30 at t = 5.740633; the model may be chattering or Zeno"
 ```
 
 ## Event direction
@@ -237,16 +237,26 @@ Several things can happen at one instant. They run in a fixed order:
 1.  handlers of `switch`, `relay` and `stop` blocks whose crossing the
     solver located;
 2.  model events due now (scheduled events, located crossings and
-    crossings caused by a jump such as a step), in increasing `priority`
-    and then by name, each seeing the state left by the previous one;
-3.  sample hits, then the modes of switching blocks;
-4.  events whose signal was pushed across its level by steps 2 and 3, in
-    further layers until nothing new crosses;
+    crossings caused by a jump such as a step or a step 1 handler), in
+    increasing `priority` and then by name, each seeing the state left
+    by the previous one;
+3.  sample hits: the modes of switching blocks are first brought up to
+    date with the state left by step 2, so a sample reads the outputs
+    that hold after the events; then the outputs are held, the updates
+    run and the modes are brought up to date again;
+4.  events whose signal was carried across its level by any single
+    handler, reset, sample update or mode change above, in further
+    layers until nothing new crosses;
 5.  functions that sit on their level and move off it in the trigger
-    direction.
+    direction, found by short probe integrations; a `switch` whose
+    control stays on its threshold takes the branch its criterion gives
+    at equality.
 
-A terminal event stops the run only after the instant is settled. The
-result has one row before the first event and one after the last.
+Every handler execution counts toward `max_events`; when the budget runs
+out the run ends with status `"event_limit"`, even if a terminal event
+fired in the same instant. A terminal event stops the run only after the
+instant is settled. The result has one row before the first event and
+one after the last.
 
 Here a scheduled reset pushes `p` across zero, which fires a second
 event, whose reset fires a third, all at t = 0.3:
@@ -264,10 +274,10 @@ sim_add_event(cas, "relay_p", sim_zero_crossing("p"), reset = list(q = "1"))
 sim_add_event(cas, "count", sim_zero_crossing("q"), reset = list(n = "x + 1"))
 r <- sim_run(sim_compile(cas), c(0, 1), times = c(0, 1))
 sim_events(r)[, c("time", "event")]
-#>   time   event
-#> 1  0.3    kick
-#> 2  0.3 relay_p
-#> 3  0.3   count
+#>       time   event
+#> kick   0.3    kick
+#> kick1  0.3 relay_p
+#> kick2  0.3   count
 tail(sim_signal(r, "n"), 1)
 #> [1] 1
 ```

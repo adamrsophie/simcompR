@@ -20,10 +20,18 @@ First release.
 - Scheduled and zero-crossing events, including crossings caused by
   jumps at segment boundaries and departures from a level (also with
   zero first derivative); switch, relay and stop blocks. All events of
-  an instant run in one priority order, resets that cross other events
-  cascade at the same instant, and terminal events stop once the instant
-  is settled. Top-level events can watch and reset blocks inside
-  subsystem instances (`"instance/block"`).
+  an instant run in one priority order; every handler, reset or sample
+  update that carries a function across its level fires the events
+  watching it at the same instant, and terminal events stop once the
+  instant is settled. Every handler counts toward `max_events`, and an
+  exhausted budget is reported as `"event_limit"`. Events can watch and
+  reset blocks inside subsystem instances at any depth
+  (`"outer/inner/block"`); resets inside a subsystem read its signals by
+  their local names.
+- Time instants are grouped once, so a sample hit, a breakpoint and a
+  scheduled event computed a few units in the last place apart meet at
+  one boundary at any time origin, and only blocks that jump at a
+  boundary are evaluated at their left limit there.
 - Block outputs and states must stay finite; a non-finite value fails
   the run with a message naming its source.
 - Optional Newton solution of algebraic loops with residual diagnostics
@@ -39,8 +47,10 @@ First release.
 - Parameter sweeps and Monte Carlo experiments with fixed seeds;
   summaries are matched by name, and `white_noise` uses its own
   counter-based generator.
-- Versioned JSON model files that keep integer, missing and named values
-  exactly and refuse values they cannot represent.
+- Versioned JSON model files that keep every double bit for bit (short
+  decimals where exact, C99 hexadecimal otherwise), integer, missing and
+  named values and integer matrices, and refuse values and files they
+  cannot represent.
 - Fifteen vignettes and a `benchmarks/` directory.
 
 ### Known limitations

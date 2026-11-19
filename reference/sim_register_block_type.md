@@ -107,7 +107,13 @@ The list returned by `build(p)` may contain:
 - `zc(t, x, d, u)` and `on_zc(i, direction, t, x, d, u)`: zero-crossing
   functions and their handler, which returns
   `list(d = , x = , terminal = )`. `zc_direction` gives one of
-  `"rising"`, `"falling"`, `"either"` per component.
+  `"rising"`, `"falling"`, `"either"` per component. The lengths of `d`
+  and `x` must match the block's states.
+
+- `on_rest(i, t, x, d, u)`: optional; called when crossing function `i`
+  sits on its level and stays there (a plateau), returning `list(d = )`
+  for the mode on the plateau. The `switch` block uses it to apply its
+  criterion at equality.
 
 - `breakpoints(t0, tf)`: times where the block's output is
   discontinuous; the integrator restarts there.

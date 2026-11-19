@@ -239,7 +239,7 @@ wrong answer:</p>
 <span><span class="va">z</span><span class="op">$</span><span class="va">status</span></span>
 <span><span class="co">#&gt; [1] "event_limit"</span></span>
 <span><span class="va">z</span><span class="op">$</span><span class="va">message</span></span>
-<span><span class="co">#&gt; [1] "reached max_events = 30 at t = 5.739052; the model may be chattering or Zeno"</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] "reached max_events = 30 at t = 5.740633; the model may be chattering or Zeno"</span></span></code></pre></div>
 </div>
 </div>
 <div class="section level2">
@@ -350,17 +350,26 @@ order:</p>
 <li>handlers of <code>switch</code>, <code>relay</code> and
 <code>stop</code> blocks whose crossing the solver located;</li>
 <li>model events due now (scheduled events, located crossings and
-crossings caused by a jump such as a step), in increasing
-<code>priority</code> and then by name, each seeing the state left by
-the previous one;</li>
-<li>sample hits, then the modes of switching blocks;</li>
-<li>events whose signal was pushed across its level by steps 2 and 3, in
-further layers until nothing new crosses;</li>
+crossings caused by a jump such as a step or a step 1 handler), in
+increasing <code>priority</code> and then by name, each seeing the state
+left by the previous one;</li>
+<li>sample hits: the modes of switching blocks are first brought up to
+date with the state left by step 2, so a sample reads the outputs that
+hold after the events; then the outputs are held, the updates run and
+the modes are brought up to date again;</li>
+<li>events whose signal was carried across its level by any single
+handler, reset, sample update or mode change above, in further layers
+until nothing new crosses;</li>
 <li>functions that sit on their level and move off it in the trigger
-direction.</li>
+direction, found by short probe integrations; a <code>switch</code>
+whose control stays on its threshold takes the branch its criterion
+gives at equality.</li>
 </ol>
-<p>A terminal event stops the run only after the instant is settled. The
-result has one row before the first event and one after the last.</p>
+<p>Every handler execution counts toward <code>max_events</code>; when
+the budget runs out the run ends with status <code>"event_limit"</code>,
+even if a terminal event fired in the same instant. A terminal event
+stops the run only after the instant is settled. The result has one row
+before the first event and one after the last.</p>
 <p>Here a scheduled reset pushes <code>p</code> across zero, which fires
 a second event, whose reset fires a third, all at <span class="math inline">t = 0.3</span>:</p>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
@@ -375,10 +384,10 @@ a second event, whose reset fires a third, all at <span class="math inline">t = 
 <span><span class="fu"><a href="../reference/sim_add_event.html">sim_add_event</a></span><span class="op">(</span><span class="va">cas</span>, <span class="st">"count"</span>, <span class="fu"><a href="../reference/sim_add_event.html">sim_zero_crossing</a></span><span class="op">(</span><span class="st">"q"</span><span class="op">)</span>, reset <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>n <span class="op">=</span> <span class="st">"x + 1"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">r</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">cas</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>, times <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_signal.html">sim_events</a></span><span class="op">(</span><span class="va">r</span><span class="op">)</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"time"</span>, <span class="st">"event"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt;   time   event</span></span>
-<span><span class="co">#&gt; 1  0.3    kick</span></span>
-<span><span class="co">#&gt; 2  0.3 relay_p</span></span>
-<span><span class="co">#&gt; 3  0.3   count</span></span>
+<span><span class="co">#&gt;       time   event</span></span>
+<span><span class="co">#&gt; kick   0.3    kick</span></span>
+<span><span class="co">#&gt; kick1  0.3 relay_p</span></span>
+<span><span class="co">#&gt; kick2  0.3   count</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">tail</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_signal.html">sim_signal</a></span><span class="op">(</span><span class="va">r</span>, <span class="st">"n"</span><span class="op">)</span>, <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 1</span></span></code></pre></div>
 <p>A cascade that never settles (two events that keep flipping each
