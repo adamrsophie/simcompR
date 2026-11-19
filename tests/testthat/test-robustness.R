@@ -356,6 +356,13 @@ test_that("solver statistics report Jacobians for ODEPACK solvers only", {
   sim_connect(m, "k", "x")
   p <- sim_compile(m)
   r <- sim_run(p, c(0, 1), times = c(0, 1))
+  # the same solve called directly, with the arguments sim_run() passes
+  direct <- deSolve::ode(1, c(0, 1), function(t, y, parms) list(-1000 * y), NULL,
+                         method = "lsoda", rtol = 1e-6, atol = 1e-8, maxsteps = 5000,
+                         tcrit = 1)
+  ist <- attr(direct, "istate")
+  expect_equal(r$diagnostics$stats[["steps"]], ist[2])
+  expect_equal(r$diagnostics$stats[["jacobians"]], ist[14])
   expect_gt(r$diagnostics$stats[["jacobians"]], 0)
   expect_true(is.na(sim_run(p, c(0, 1), times = c(0, 1), method = "rk4")$diagnostics$stats[["jacobians"]]))
 })

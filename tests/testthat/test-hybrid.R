@@ -287,3 +287,34 @@ test_that("cascades that never settle end at the event limit", {
   r <- suppressWarnings(sim_run(sim_compile(m), c(0, 1), max_events = 20, on_failure = "warn"))
   expect_equal(r$status, "event_limit")
 })
+
+test_that("a root located on a boundary does not hide jump crossings there", {
+  m <- sim_model()
+  sim_add_block(m, "constant", "one")
+  sim_add_block(m, "integrator", "y")
+  sim_connect(m, "one", "y")
+  sim_add_block(m, "step", "s", time = 0.5)
+  sim_add_block(m, "integrator", "x")
+  sim_connect(m, "s", "x")
+  sim_add_event(m, "on_step", sim_zero_crossing("s", level = 0.5), reset = list(x = "x + 10"))
+  sim_add_event(m, "on_y", sim_zero_crossing("y", level = 0.5), reset = list(x = "x + 100"))
+  r <- sim_run(sim_compile(m), c(0, 1), times = c(0, 1))
+  expect_setequal(sim_events(r)$event, c("on_step", "on_y"))
+  expect_equal(sim_events(r)$time, c(0.5, 0.5), tolerance = 1e-8)
+  expect_equal(unname(tail(sim_signal(r, "x"), 1)), 110.5, tolerance = 1e-7)
+})
+
+test_that("a slow signal far from zero that returns to its level keeps its direction", {
+  # y = 100 + 0.01 (t - t^2) leaves 100 rising at 0 and returns falling at 1
+  m <- sim_model()
+  sim_add_block(m, "ode", "y", n_inputs = 0, initial = 100,
+                deriv = function(t, x, u) 0.01 * (1 - 2 * t))
+  sim_add_event(m, "up", sim_zero_crossing("y", "rising", level = 100), terminal = FALSE,
+                reset = list(y = "x"))
+  sim_add_event(m, "down", sim_zero_crossing("y", "falling", level = 100), terminal = TRUE)
+  r <- sim_run(sim_compile(m), c(0, 1.5), times = c(0, 1.5), rtol = 1e-10, atol = 1e-10)
+  ev <- sim_events(r)
+  expect_equal(ev$event, c("up", "down"))
+  expect_equal(ev$direction, c("rising", "falling"))
+  expect_equal(ev$time[2], 1, tolerance = 1e-6)
+})

@@ -64,5 +64,23 @@ test_that("sample clocks keep every hit when the time axis is shifted", {
     expect_equal(sim_signal(r, c("n", "q")), sim_signal(ref, c("n", "q")), info = format(t0))
     expect_equal(sim_discrete_states(r), sim_discrete_states(ref), info = format(t0))
   }
-  expect_error(sim_run(p, 1e11 + c(0, 1)), "too short to be resolved")
+  expect_error(sim_run(p, 1e13 + c(0, 1)), "too short to be resolved")
+})
+
+test_that("short periods and continuous states stay exact far from zero", {
+  m <- sim_model()
+  sim_add_block(m, "constant", "one")
+  sim_add_block(m, "discrete_integrator", "n", gain = 1, period = 1e-4)
+  sim_add_block(m, "integrator", "x")
+  sim_connect(m, "one", "n")
+  sim_connect(m, "one", "x")
+  p <- sim_compile(m)
+  for (t0 in c(0, 1e9, 1.7e9)) {
+    tf <- t0 + 0.1
+    r <- sim_run(p, c(t0, tf), times = c(t0, tf), include_ticks = FALSE)
+    # 1001 hits in [t0, tf], each adding one period
+    expect_equal(unname(sim_discrete_states(r)[2, 1]), 0.1001, tolerance = 1e-12, info = format(t0))
+    # the integrated length is the represented length of the interval
+    expect_equal(unname(tail(sim_signal(r, "x"), 1)), tf - t0, tolerance = 1e-12, info = format(t0))
+  }
 })

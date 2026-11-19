@@ -10,8 +10,10 @@ root_methods <- c("lsoda", "lsode", "lsodes", "lsodar")
 #' `offset + k * period` with integer `k`, never by accumulating `period`,
 #' so they do not drift and do not depend on where the time axis starts.
 #' Two computed times within 16 units in the last place of the largest
-#' time in `tspan` are the same instant; a sample period that is not far
-#' above that resolution is an error.
+#' time in `tspan` are the same instant; a sample period that is not well
+#' above that resolution is an error. The solver integrates each segment
+#' on time measured from the segment start, so continuous states keep
+#' their accuracy when the time axis starts far from zero.
 #'
 #' **At an instant** (a segment boundary or a located crossing) the
 #' simulator, in this order:
@@ -163,7 +165,7 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
 
   # Timeline: boundaries, sample hits and scheduled events ---------------
   rates <- plan$rates
-  small <- rates$period <= 64 * tol
+  small <- rates$period <= 4 * tol
   if (any(small)) {
     sim_abort("Sample period ", format(rates$period[small][1]), " is too short to be ",
               "resolved at times near ", format(max(abs(tspan))), " in double precision; ",
@@ -336,13 +338,22 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
       back <- NULL
       dir_of <- function(k) {
         if (abs(root$g_start[k]) > zc_tol) return(if (root$g_start[k] < 0) "rising" else "falling")
-        if (is.null(back)) {
-          h <- min(64 * tol, (t - root$t_start) / 2)
-          f <- if (plan$nx) derivatives(plan, t, x, d, sig) else numeric()
-          xb <- x - h * f
-          back <<- zero_crossings(plan, t - h, xb, d, evaluate(plan, t - h, xb, d, held)$sig)
+        # the function started on its level: look a short way back along
+        # the trajectory, lengthening the step until the value differs (a
+        # slow signal far from zero needs more than a few units of rounding)
+        span <- (t - root$t_start) / 2
+        h <- min(64 * tol, span)
+        f <- if (plan$nx) derivatives(plan, t, x, d, sig) else numeric()
+        repeat {
+          if (is.null(back) || back$h != h) {
+            xb <- x - h * f
+            back <<- list(h = h, g = zero_crossings(plan, t - h, xb, d,
+                                                    evaluate(plan, t - h, xb, d, held)$sig))
+          }
+          if (back$g[k] != g[k] || h >= span) break
+          h <- min(h * 100, span)
         }
-        if (back[k] < g[k]) "rising" else if (back[k] > g[k]) "falling" else "either"
+        if (back$g[k] < g[k]) "rising" else if (back$g[k] > g[k]) "falling" else "either"
       }
       for (i in plan$zc$blocks) {
         b <- plan$blocks[[i]]
@@ -605,29 +616,35 @@ integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
   # this segment when the solver evaluates the right-hand side exactly at
   # tn. All other blocks see the true solver time.
   t_left <- tn - 4 * .Machine$double.eps * max(1, abs(tn))
-  signals_at <- function(tt, y) evaluate(plan, tt, xs(y), d, held, t_left = t_left)$sig
-  func <- function(tt, y, parms) {
-    sig <- signals_at(tt, y)
-    list(if (dummy) 0 else derivatives(plan, tt, y, d, sig))
+  # The solver runs on time since the segment start, tau in [0, L], so the
+  # length it integrates is exact even when t is far from zero (at t = 1e9
+  # one unit in the last place is 1.2e-7). Blocks see the absolute time.
+  L <- tn - t
+  at <- function(tau) if (tau >= L) tn else t + tau
+  signals_at <- function(tau, y) evaluate(plan, at(tau), xs(y), d, held, t_left = t_left)$sig
+  func <- function(tau, y, parms) {
+    sig <- signals_at(tau, y)
+    list(if (dummy) 0 else derivatives(plan, at(tau), y, d, sig))
   }
-  args <- c(list(y = y0, times = c(t, inner, tn), func = func, parms = NULL,
+  inner_local <- inner - t
+  args <- c(list(y = y0, times = c(0, inner_local, L), func = func, parms = NULL,
                  method = method, rtol = rtol, atol = atol, maxsteps = maxsteps,
-                 tcrit = tn),
+                 tcrit = L),
             ode_args)
   g0 <- NULL
   if (nzc) {
     g0 <- zero_crossings(plan, t, x, d, evaluate(plan, t, x, d, held)$sig)
     at0 <- abs(g0) <= zc_tol
     off <- ifelse(at0, g0, 0)
-    args$rootfunc <- function(tt, y, parms) {
+    args$rootfunc <- function(tau, y, parms) {
       xx <- xs(y)
-      v <- zero_crossings(plan, tt, xx, d, signals_at(tt, y)) - off
+      v <- zero_crossings(plan, at(tau), xx, d, signals_at(tau, y)) - off
       # A function that starts at zero and stays exactly there (a constant
       # signal sitting on its threshold) would make the root finder stop with
       # "root too near the initial point". Past the start, report an exact
       # zero as positive; at the start itself keep the zero, so the root
       # finder takes its reference sign from the first step.
-      if (tt > t) v[at0 & v == 0] <- 1
+      if (tau > 0) v[at0 & v == 0] <- 1
       v
     }
   }
@@ -650,13 +667,17 @@ integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
   jac <- if (method %in% odepack_methods && length(ist) >= 14L) ist[14] else NA_real_
   stats <- c(segments = 1, steps = ist[2] %||% NA, rhs_evaluations = ist[3] %||% NA,
              jacobians = jac, roots = 0)
-  tt <- out[, 1]
+  tau <- out[, 1]
   ymat <- out[, -1, drop = FALSE]
   if (dummy) ymat <- matrix(numeric(), nrow(out), 0L)
   troot <- attr(out, "troot")
   is_root <- length(troot) > 0L
   last <- nrow(out)
-  keep <- which(tt %in% inner & (if (is_root) tt < troot[1] else TRUE))
+  # back to absolute time; requested output times keep their exact values
+  tt <- vapply(tau, at, 0)
+  hit <- match(tau, inner_local)
+  tt[!is.na(hit)] <- inner[hit[!is.na(hit)]]
+  keep <- which(!is.na(hit) & (if (is_root) tau < troot[1] else TRUE))
   res <- list(times = tt[keep], x = ymat[keep, , drop = FALSE], stats = stats,
               warnings = warns)
   if (!all(is.finite(ymat))) {
@@ -678,6 +699,13 @@ integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
     iroot <- attr(out, "iroot")
     which_root <- if (length(iroot) == nzc) which(iroot != 0) else as.integer(iroot)
     res$root <- list(time = tt[last], x = ymat[last, ], which = which_root)
+    # a root on the segment end is also a boundary: keep the left limit, so
+    # crossings caused by jumps there are still seen
+    if (abs(tt[last] - tn) <= tol) {
+      xe <- xs(ymat[last, ])
+      res$g_end <- zero_crossings(plan, tn, xe, d,
+                                  evaluate(plan, tn, xe, d, held, t_left = t_left)$sig)
+    }
   } else {
     res$x_end <- ymat[last, ]
     if (nzc) {
@@ -725,10 +753,12 @@ departure_probe <- function(plan, t, tn, x, d, held, ode_args) {
   t_left <- tn - 4 * .Machine$double.eps * max(1, abs(tn))
   xf <- x
   if (plan$nx) {
-    func <- function(tt, y, parms) {
+    # local time, as in integrate_segment()
+    func <- function(tau, y, parms) {
+      tt <- t + tau
       list(derivatives(plan, tt, y, d, evaluate(plan, tt, y, d, held, t_left = t_left)$sig))
     }
-    out <- suppressWarnings(do.call(deSolve::ode, c(list(y = x, times = c(t, th), func = func,
+    out <- suppressWarnings(do.call(deSolve::ode, c(list(y = x, times = c(0, h), func = func,
                                                           parms = NULL), ode_args)))
     xf <- out[nrow(out), -1L]
     if (nrow(out) < 2L || !all(is.finite(xf))) sim_abort("the departure probe failed.")

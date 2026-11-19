@@ -91,7 +91,14 @@ zeros are points where a memoryless output or its slope jumps (the
 corners of a saturation), and their number for the given input sizes.
 The integrator restarts exactly at each kink; nothing is logged. They
 are ignored by methods without root finding.
+\item \code{nonfinite_ok}: indices into \code{d} of discrete states that may hold
+\code{-Inf} (a "not yet" sentinel such as the entry time of a state machine
+before its first hit). All other values must stay finite.
 }
+
+Outputs, \code{update}, \code{on_zc} and resets must return
+finite numbers (except the \code{nonfinite_ok} states); \code{NA}, \code{NaN} or an
+infinite value fails the run with a message naming the block.
 
 All functions must be free of side effects: the solver calls them at
 trial points that it may later reject.
