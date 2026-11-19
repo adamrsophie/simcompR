@@ -72,3 +72,48 @@ test_that("reading rejects foreign files, future schemas and unsafe expressions"
   x$blocks[[1]]$params$expr$`$chr`[[1]] <- "system('echo hacked')"
   expect_error(sim_model_from_list(x), "not allowed")
 })
+
+roundtrip <- function(m) {
+  f <- withr::local_tempfile(fileext = ".json")
+  sim_write_json(m, f)
+  sim_read_json(f)
+}
+
+test_that("values round-trip with their type, missing values and names", {
+  vals <- list(chr = c("a", NA, "b"), chr0 = character(), chr_na_first = c(NA, "x"),
+               int = c(1L, NA, 3L), dbl = c(a = 1.5, b = NA, c = NaN, d = Inf),
+               lgl = c(TRUE, NA), named_na = stats::setNames(1:2, c("p", NA)),
+               mat = matrix(c(0.1, 2, 3, 4), 2), lst = list(a = "x", b = list(NA_character_)))
+  m <- sim_model(params = vals)
+  back <- roundtrip(m)$params
+  for (nm in names(vals)) expect_identical(back[[nm]], vals[[nm]], info = nm)
+})
+
+test_that("a missing character value keeps model behavior after a round trip", {
+  m <- sim_model(params = list(labels = c("a", NA_character_, "b")))
+  sim_add_block(m, "constant", "c")
+  sim_add_block(m, "expression", "e", expr = "length(labels)")
+  sim_connect(m, "c", "e")
+  run <- function(mm) unname(sim_signal(sim_run(sim_compile(mm), c(0, 1), times = 1), "e"))
+  expect_equal(run(roundtrip(m)), run(m))
+})
+
+test_that("values that would change on reload are rejected when writing", {
+  bad <- list(arr = array(1:8, c(2, 2, 2)), chr_mat = matrix("a", 1, 1),
+              dimnamed = matrix(1, 1, 1, dimnames = list("r", "c")),
+              fac = factor("a"), df = data.frame(a = 1), date = Sys.Date())
+  for (nm in names(bad)) {
+    m <- sim_model(params = stats::setNames(list(bad[[nm]]), nm))
+    expect_error(sim_model_to_list(m), "cannot be written", info = nm)
+  }
+})
+
+test_that("schema versions must be whole numbers in range", {
+  x <- sim_model_to_list(sim_model())
+  for (v in list(1.9, 0, -1, "1", NA)) {
+    x$schema_version <- v
+    expect_error(sim_model_from_list(x), "schema version", info = format(v))
+  }
+  x$schema_version <- 2
+  expect_error(sim_model_from_list(x), "reads version")
+})

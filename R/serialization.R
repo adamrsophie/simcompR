@@ -6,7 +6,13 @@ schema_version <- 1L
 #' Models are written as versioned, declarative JSON: block types, names,
 #' parameters, connections, events and nested subsystems. Numbers are
 #' stored as strings with 17 significant digits, so they read back
-#' bit-for-bit, and matrices keep their dimensions.
+#' bit-for-bit; integer, logical and character vectors keep their type,
+#' missing values and names, and numeric matrices keep their dimensions.
+#' A value that could not be read back unchanged (an array with more than
+#' two dimensions, a matrix that is not numeric or has dimension names, a
+#' factor, a data frame, or any other value with a class or attributes
+#' other than names) is rejected when the model is written, instead of
+#' being saved in a different form.
 #'
 #' Only portable content can be written. Block types defined by R functions
 #' (`fcn`, `ode`, `signal_function`), user types registered with
@@ -98,8 +104,12 @@ sim_model_from_list <- function(x) {
   if (!is.list(x) || !identical(x$schema, schema_name)) {
     sim_abort("Not a simcompR model file (missing schema '", schema_name, "').")
   }
-  v <- as.integer(x$schema_version)
-  if (length(v) != 1L || is.na(v) || v > schema_version) {
+  v <- x$schema_version
+  if (!is.numeric(v) || length(v) != 1L || is.na(v) || v != round(v) || v < 1) {
+    sim_abort("Model file has an invalid schema version; expected a whole number ",
+              "from 1 to ", schema_version, ".")
+  }
+  if (v > schema_version) {
     sim_abort("Model file uses schema version ", x$schema_version,
               "; this version of simcompR reads version ", schema_version, " and older.")
   }
@@ -162,14 +172,25 @@ enc <- function(v, where) {
   if (is.function(v)) {
     sim_abort(where, " is an R function and cannot be written to a portable model file.")
   }
-  if (is.matrix(v) && is.numeric(v)) {
+  extra <- setdiff(names(attributes(v)), "names")
+  if (is.matrix(v) && is.double(v) && identical(extra, "dim")) {
     return(list(`$matrix` = list(nrow = nrow(v), ncol = ncol(v), data = as.list(num_str(as.vector(v))))))
   }
+  if (length(extra)) {
+    what <- if (length(dim(v)) > 2L) "an array with more than two dimensions"
+      else if (is.matrix(v)) "a matrix that is not a plain numeric matrix"
+      else paste0("a value with attribute(s) ", paste(extra, collapse = ", "))
+    sim_abort(where, " is ", what, " (class '", class(v)[1], "'), which cannot be ",
+              "written to a portable model file without changing it.")
+  }
   nm <- names(v)
-  if (is.numeric(v)) {
+  if (is.integer(v)) {
+    out <- list(`$int` = as.list(num_str(v)))
+  } else if (is.double(v)) {
     out <- list(`$num` = as.list(num_str(v)))
   } else if (is.character(v)) {
-    out <- list(`$chr` = as.list(v))
+    # missing elements are JSON nulls
+    out <- list(`$chr` = lapply(v, function(s) if (is.na(s)) NULL else s))
   } else if (is.logical(v)) {
     out <- list(`$lgl` = as.list(ifelse(is.na(v), "NA", ifelse(v, "TRUE", "FALSE"))))
   } else if (is.list(v)) {
@@ -178,14 +199,19 @@ enc <- function(v, where) {
   } else {
     sim_abort(where, " has class '", class(v)[1], "', which cannot be written to JSON.")
   }
-  if (!is.null(nm)) out$names <- as.list(nm)
+  if (!is.null(nm)) out$names <- lapply(nm, function(s) if (is.na(s)) NULL else s)
   out
+}
+
+# JSON array of strings and nulls to a character vector, by position
+dec_chr <- function(items) {
+  vapply(items, function(s) if (is.null(s)) NA_character_ else as.character(s), "")
 }
 
 dec <- function(x) {
   if (!is.list(x) || !length(x)) return(x)
   key <- names(x)[1]
-  nm <- if (!is.null(x$names)) unlist(x$names) else NULL
+  nm <- if (!is.null(x$names)) dec_chr(x$names) else NULL
   v <- switch(key,
     `$null` = NULL,
     `$param` = sim_param(x[[1]]),
@@ -198,12 +224,14 @@ dec <- function(x) {
     },
     `$matrix` = matrix(as.numeric(unlist(x[[1]]$data)), x[[1]]$nrow, x[[1]]$ncol),
     `$num` = suppressWarnings(as.numeric(unlist(x[[1]]))),
-    `$chr` = as.character(unlist(x[[1]])),
+    `$int` = suppressWarnings(as.integer(unlist(x[[1]]))),
+    `$chr` = dec_chr(x[[1]]),
     `$lgl` = as.logical(unlist(x[[1]])),
     `$list` = lapply(x[[1]], dec),
     sim_abort("Unknown encoded value '", key, "' in model file.")
   )
   if (key == "$num" && length(v) == 0L) v <- numeric()
+  if (key == "$int" && length(v) == 0L) v <- integer()
   if (key == "$chr" && length(v) == 0L) v <- character()
   if (key == "$list" && length(v) == 0L) v <- list()
   if (!is.null(nm) && !is.null(v)) names(v) <- nm
