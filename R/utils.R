@@ -75,24 +75,35 @@ time_tol <- function(tspan) {
 exact_match_args <- function(call, formal_names, env) {
   args <- as.list(call)[-1L]
   if (!length(args)) return(NULL)
+  # a `...` forwarded by a wrapper stands for the wrapper's own arguments,
+  # whose names R also matched partially
+  is_dots <- vapply(args, identical, TRUE, quote(...))
   nms <- names(args) %||% character(length(args))
-  exact <- nzchar(nms) & nms %in% formal_names
-  free <- setdiff(formal_names, nms[exact])
-  partial <- nzchar(nms) & !exact &
-    vapply(nms, function(n) any(startsWith(free, n)), TRUE)
+  arg_names <- unlist(lapply(seq_along(args), function(i) {
+    if (!is_dots[i]) return(nms[i])
+    dn <- eval(quote(...names()), env)
+    if (is.null(dn)) character(eval(quote(...length()), env)) else dn
+  }))
+  arg_names[is.na(arg_names)] <- ""
+  exact <- nzchar(arg_names) & arg_names %in% formal_names
+  free <- setdiff(formal_names, arg_names[exact])
+  partial <- nzchar(arg_names) & !exact &
+    vapply(arg_names, function(n) any(startsWith(free, n)), TRUE)
   if (!any(partial)) return(NULL)
-  if (any(vapply(args, identical, TRUE, quote(...)))) return(NULL)
-  vals <- lapply(args, eval, envir = env)
+  vals <- list()
+  for (i in seq_along(args)) {
+    vals <- c(vals, if (is_dots[i]) eval(quote(list(...)), env) else list(eval(args[[i]], env)))
+  }
   fixed <- list()
   dots <- list()
   for (i in seq_along(vals)) {
     if (exact[i]) {
-      fixed[nms[i]] <- list(vals[[i]])
-    } else if (!nzchar(nms[i]) && length(free)) {
+      fixed[arg_names[i]] <- list(vals[[i]])
+    } else if (!nzchar(arg_names[i]) && length(free)) {
       fixed[free[1]] <- list(vals[[i]])
       free <- free[-1L]
     } else {
-      dots <- c(dots, vals[i])
+      dots <- c(dots, stats::setNames(vals[i], arg_names[i]))
     }
   }
   list(fixed = fixed, dots = dots)

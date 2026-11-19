@@ -77,7 +77,8 @@ sim_add_event <- function(model, name, trigger, reset = list(),
     sim_abort("`trigger` must come from sim_zero_crossing() or sim_at().")
   }
   if (trigger$kind == "zero_crossing") {
-    trigger$signal <- block_path_of(model, trigger$signal, "signal")
+    trigger$signal <- block_path_of(model, trigger$owner %||% trigger$signal, "signal")
+    trigger$owner <- NULL
   }
   if (!is.list(reset) || (length(reset) && is.null(names(reset)))) {
     sim_abort("`reset` must be a named list of block resets.")
@@ -117,7 +118,11 @@ sim_remove_event <- function(model, name) {
 #' @export
 sim_zero_crossing <- function(signal, direction = "either", level = 0,
                               port = 1, element = 1) {
-  if (inherits(signal, "sim_block")) signal <- signal$name
+  owner <- NULL
+  if (inherits(signal, "sim_block")) {
+    owner <- signal
+    signal <- signal$name
+  }
   if (!is.character(signal) || length(signal) != 1L) {
     sim_abort("`signal` must be a block name or handle.")
   }
@@ -128,7 +133,7 @@ sim_zero_crossing <- function(signal, direction = "either", level = 0,
   }
   structure(list(kind = "zero_crossing", signal = signal, direction = direction,
                  level = as.numeric(level), port = as.integer(port),
-                 element = as.integer(element)),
+                 element = as.integer(element), owner = owner),
             class = "sim_trigger")
 }
 

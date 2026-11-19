@@ -12,14 +12,19 @@ sim_add_block(model, type, name, ...)
 \item{type}{Block type, see \code{\link[=sim_block_types]{sim_block_types()}}.}
 
 \item{name}{Unique block name. Names may not contain \code{/}, which separates
-subsystem levels in compiled names.}
+subsystem levels in compiled names, nor \code{[}, \verb{]} or \code{:}, which appear in
+the names of signal elements and result columns; \code{"time"} and \code{"kind"}
+are reserved for result columns. Every signal of the compiled model
+(block outputs, \code{block.port} names and subsystem outputs) must have
+its own name.}
 
 \item{...}{Block parameters. Any parameter may be a \code{\link[=sim_param]{sim_param()}}
 reference.}
 }
 \value{
 A \code{sim_block} handle that can be passed to \code{\link[=sim_connect]{sim_connect()}}.
-The model is modified in place.
+A handle works only with the model that created it and its
+\code{\link[=sim_copy]{sim_copy()}} copies. The model is modified in place.
 }
 \description{
 Add a block to a model

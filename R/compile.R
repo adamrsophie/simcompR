@@ -197,7 +197,11 @@ compile_flat <- function(flat, params, opts, previous = NULL) {
   names(blocks) <- bnames
   signal_of <- layout$signal_of
   for (a in names(flat$aliases)) {
-    if (is.null(signal_of[[a]])) signal_of[[a]] <- signal_of[[flat$aliases[[a]]]]
+    if (!is.null(signal_of[[a]])) {
+      sim_abort("Signal name '", a, "' is used twice: it names an output of subsystem ",
+                "instance '", sub("[.][^.]*$", "", a), "' and another signal; rename one of them.")
+    }
+    signal_of[[a]] <- signal_of[[flat$aliases[[a]]]]
   }
   for (b in blocks) {
     if (b$type == "scope" && is.null(signal_of[[b$name]])) {
@@ -373,7 +377,12 @@ layout_vectors <- function(defs, sizes, bnames) {
         sim_abort("Signal name '", nm, "' is used twice (a block name collides with ",
                   "the name of another block's output port); rename one of them.")
       }
-      sig_names <- c(sig_names, element_names(nm, so[j]))
+      en <- element_names(nm, so[j])
+      dup <- intersect(en, sig_names)
+      if (length(dup)) {
+        sim_abort("Signal element name '", dup[1], "' is used twice; rename one of the blocks.")
+      }
+      sig_names <- c(sig_names, en)
       signal_of[[nm]] <- out_idx[[i]][[j]]
     }
     pos <- pos + sum(so)

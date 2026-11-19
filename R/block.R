@@ -312,8 +312,19 @@ normalize_definition <- function(def, block_name, type) {
   where <- paste0("Block '", block_name, "' (", type, ")")
   in_nm <- names(def$inputs)
   out_nm <- names(def$outputs)
-  def$inputs <- as.integer(def$inputs %||% integer())
-  def$outputs <- as.integer(def$outputs %||% integer())
+  # sizes are checked before coercion: as.integer(2.5) would silently be 2
+  whole <- function(v, what, min = 0, na_ok = FALSE) {
+    if (is.null(v)) return(integer())
+    known <- if (na_ok) v[!is.na(v)] else v
+    if (!(is.numeric(v) || is.logical(v) && all(is.na(v))) || any(!is.finite(known)) ||
+        any(known != round(known)) || any(known < min)) {
+      sim_abort(where, ": `", what, "` must be whole numbers of at least ", min,
+                if (na_ok) " (or NA)", ", not ", deparse_short(unname(v)), ".")
+    }
+    as.integer(v)
+  }
+  def$inputs <- whole(def$inputs, "inputs", 1, na_ok = TRUE)
+  def$outputs <- whole(def$outputs, "outputs", 1, na_ok = TRUE)
   ni <- length(def$inputs)
   no <- length(def$outputs)
   def$input_names <- def$input_names %||% in_nm %||%
@@ -328,12 +339,12 @@ normalize_definition <- function(def, block_name, type) {
     sim_abort(where, ": `feedthrough` must have one value per input port.")
   }
   def$x0 <- as.numeric(def$x0 %||% numeric())
-  def$nx <- as.integer(def$nx %||% length(def$x0))
+  def$nx <- whole(def$nx %||% length(def$x0), "nx")
   if (length(def$x0) != def$nx) {
     sim_abort(where, ": `x0` must have length `nx`.")
   }
   def$d0 <- as.numeric(def$d0 %||% numeric())
-  def$nd <- as.integer(def$nd %||% length(def$d0))
+  def$nd <- whole(def$nd %||% length(def$d0), "nd")
   if (length(def$d0) != def$nd) {
     sim_abort(where, ": `d0` must have length `nd`.")
   }

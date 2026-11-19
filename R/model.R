@@ -35,8 +35,28 @@ sim_model <- function(name = "model", params = list()) {
                               stringsAsFactors = FALSE)
   m$events <- list()
   m$version <- 0L
+  m$id <- new_model_id()
   class(m) <- "sim_model"
   m
+}
+
+# Identity of a model, carried by its block handles so that a handle cannot
+# be used on another model that happens to have a block of the same name.
+# Copies keep the identity, so handles stay valid in sim_copy() results.
+model_ids <- new.env(parent = emptyenv())
+new_model_id <- function() {
+  model_ids$n <- (model_ids$n %||% 0) + 1
+  paste(Sys.getpid(), format(as.numeric(Sys.time()), digits = 15), model_ids$n, sep = "-")
+}
+
+# The block name of a name or handle, refusing a handle of another model.
+handle_name <- function(model, block) {
+  if (!inherits(block, "sim_block")) return(block)
+  if (!is.null(block$model_id) && !identical(block$model_id, model$id)) {
+    sim_abort("The handle of block '", block$name, "' belongs to model '", block$model,
+              "', not to model '", model$name, "'; use the block name or a handle of this model.")
+  }
+  block$name
 }
 
 check_param_list <- function(params, what) {
@@ -64,11 +84,16 @@ touch <- function(model) {
 #' @param model A [sim_model()].
 #' @param type Block type, see [sim_block_types()].
 #' @param name Unique block name. Names may not contain `/`, which separates
-#'   subsystem levels in compiled names.
+#'   subsystem levels in compiled names, nor `[`, `]` or `:`, which appear in
+#'   the names of signal elements and result columns; `"time"` and `"kind"`
+#'   are reserved for result columns. Every signal of the compiled model
+#'   (block outputs, `block.port` names and subsystem outputs) must have
+#'   its own name.
 #' @param ... Block parameters. Any parameter may be a [sim_param()]
 #'   reference.
 #' @return A `sim_block` handle that can be passed to [sim_connect()].
-#'   The model is modified in place.
+#'   A handle works only with the model that created it and its
+#'   [sim_copy()] copies. The model is modified in place.
 #' @examples
 #' m <- sim_model()
 #' b <- sim_add_block(m, "sine", "u", amplitude = 2, frequency = 3)
@@ -86,9 +111,12 @@ sim_add_block <- function(model, type, name, ...) {
     params <- fx$dots
   }
   check_model(model)
-  if (!is.character(name) || length(name) != 1L || !nzchar(name) ||
-      grepl("/", name, fixed = TRUE)) {
-    sim_abort("Block `name` must be a non-empty string without '/'.")
+  if (!is.character(name) || length(name) != 1L || is.na(name) || !nzchar(name) ||
+      grepl("[]/:[]", name)) {
+    sim_abort("Block `name` must be a non-empty string without '/', '[', ']' or ':'.")
+  }
+  if (name %in% c("time", "kind")) {
+    sim_abort("Block name '", name, "' is reserved for a column of the results.")
   }
   if (name %in% names(model$blocks)) {
     sim_abort("Model '", model$name, "' already has a block named '", name, "'.")
@@ -123,7 +151,7 @@ probe_ports <- function(type_def, params, model_params, name) {
 
 block_handle <- function(model, name) {
   b <- model$blocks[[name]]
-  structure(list(name = name, type = b$type, model = model$name),
+  structure(list(name = name, type = b$type, model = model$name, model_id = model$id),
             class = "sim_block")
 }
 
@@ -135,7 +163,7 @@ print.sim_block <- function(x, ...) {
 }
 
 block_name_of <- function(model, block, what) {
-  if (inherits(block, "sim_block")) block <- block$name
+  block <- handle_name(model, block)
   if (!is.character(block) || length(block) != 1L) {
     sim_abort("`", what, "` must be a block name or a sim_block handle.")
   }
@@ -148,7 +176,7 @@ block_name_of <- function(model, block, what) {
 # A block of the model or, written "instance/block", a block inside a
 # subsystem instance (any depth). Returns the path.
 block_path_of <- function(model, block, what) {
-  if (inherits(block, "sim_block")) block <- block$name
+  block <- handle_name(model, block)
   if (!is.character(block) || length(block) != 1L) {
     sim_abort("`", what, "` must be a block name or a sim_block handle.")
   }
@@ -298,6 +326,10 @@ sim_set_block_params <- function(model, block, ...) {
   block <- block_name_of(model, block, "block")
   b <- model$blocks[[block]]
   type_def <- get_block_type(b$type)
+  if (length(new) && (is.null(names(new)) || any(!nzchar(names(new))))) {
+    sim_abort("Block parameters must be named, for example sim_set_block_params(m, \"",
+              block, "\", gain = 2).")
+  }
   unknown <- setdiff(names(new), names(type_def$params))
   if (length(unknown)) {
     sim_abort("Block '", block, "': unknown parameter(s) ",
