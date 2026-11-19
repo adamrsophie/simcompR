@@ -2,9 +2,14 @@
 
 <!-- badges: start -->
 [![R-CMD-check](https://github.com/adamrsophie/simcompR/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/adamrsophie/simcompR/actions/workflows/R-CMD-check.yaml)
+[![CRAN-check](https://github.com/adamrsophie/simcompR/actions/workflows/cran-check.yaml/badge.svg)](https://github.com/adamrsophie/simcompR/actions/workflows/cran-check.yaml)
+[![Codecov test coverage](https://codecov.io/gh/adamrsophie/simcompR/graph/badge.svg)](https://app.codecov.io/gh/adamrsophie/simcompR)
 [![pkgdown](https://github.com/adamrsophie/simcompR/actions/workflows/pkgdown.yaml/badge.svg)](https://adamrsophie.github.io/simcompR/)
 [![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![Archived on Software Heritage](https://archive.softwareheritage.org/badge/origin/https://github.com/adamrsophie/simcompR/)](https://archive.softwareheritage.org/browse/origin/?origin_url=https://github.com/adamrsophie/simcompR)
+<!-- DOI badge: Zenodo mints a concept DOI on the first GitHub release; replace XXXXXXXX and uncomment. -->
+<!-- [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXXXX) -->
 <!-- badges: end -->
 
 ***simcompR*** builds and simulates block diagrams in R, in the spirit of
