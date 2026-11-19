@@ -179,22 +179,55 @@ register_source_blocks <- function() {
         n <- check_same_length(mu, s, what = "`mean` and `sd`")
         if (any(s < 0)) sim_abort("`sd` must be non-negative.")
         seed <- p$seed
-        if (!is_scalar_number(seed) || seed != round(seed)) {
-          sim_abort("`seed` must be an integer.")
+        if (!is_scalar_number(seed) || seed != round(seed) || abs(seed) >= 2^53) {
+          sim_abort("`seed` must be an integer with absolute value below 2^53.")
         }
-        # The discrete state is the sample counter. Each draw depends only on
-        # (seed, counter), so results are reproducible and independent of the
-        # caller's random stream.
-        # ponytail: one set.seed() per sample hit; precompute blocks of draws
-        # if noise-heavy models become slow.
-        draw <- function(k) {
-          with_seed(seed * 1000003 + k, stats::rnorm(n, mu, s))
-        }
+        # The discrete state is the sample counter. Each draw is a function of
+        # (seed, counter, element) only, computed by noise_normal(), which
+        # never touches R's random number generator.
+        draw <- function(k) mu + s * noise_normal(seed, k, seq_len(n))
         list(outputs = n, nd = 1L, d0 = 0, sample = c(p$period, p$offset),
              output = function(t, x, d, u) draw(d[[1]]),
              update = function(t, x, d, u) d + 1,
              held0 = function(size) mu)
       })
+}
+
+# Counter-based Gaussian noise ------------------------------------------------
+#
+# A draw is a pure function of (seed, counter, element). The integers are
+# split into 32-bit words and absorbed one at a time with the MurmurHash3
+# finalizer; two lanes give 53 random bits, a uniform in (0, 1), and the
+# normal quantile of it. All arithmetic is exact in doubles: products are
+# formed from 16-bit halves and xor is done on 16-bit halves.
+u32_mul <- function(a, b) {
+  al <- a %% 65536; ah <- a %/% 65536
+  bl <- b %% 65536; bh <- b %/% 65536
+  (((ah * bl + al * bh) %% 65536) * 65536 + al * bl) %% 4294967296
+}
+u32_xor <- function(a, b) {
+  bitwXor(a %/% 65536, b %/% 65536) * 65536 + bitwXor(a %% 65536, b %% 65536)
+}
+u32_fmix <- function(h) {
+  h <- u32_xor(h, h %/% 65536)
+  h <- u32_mul(h, 2246822507)   # 0x85ebca6b
+  h <- u32_xor(h, h %/% 8192)
+  h <- u32_mul(h, 3266489909)   # 0xc2b2ae35
+  u32_xor(h, h %/% 65536)
+}
+u32_words <- function(v) {
+  v <- v %% 2^53
+  list(v %% 4294967296, v %/% 4294967296)
+}
+noise_normal <- function(seed, k, j) {
+  words <- c(u32_words(seed), u32_words(k))
+  lane <- function(l) {
+    h <- rep(l * 2654435769 %% 4294967296, length(j))   # 0x9e3779b9
+    for (w in c(words, list(j))) h <- u32_fmix(u32_xor((h + 2654435769) %% 4294967296, w))
+    h
+  }
+  u <- (lane(1) * 2097152 + lane(2) %/% 2048 + 0.5) / 2^53
+  stats::qnorm(u)
 }
 
 # Run expr with a temporary seed and restore the caller's random stream.

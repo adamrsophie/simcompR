@@ -38,7 +38,12 @@ list of named lists.}
 \item{tspan, times}{Passed to \code{\link[=sim_run]{sim_run()}}.}
 
 \item{summary}{Optional function of a \code{sim_result} returning a named
-numeric vector. Its values are collected in \verb{$summary}.}
+numeric vector with unique, nonempty names. Values are matched to
+columns by name, never by position: a run that returns the names in
+another order keeps their meaning, a run that omits a name gets \code{NA}
+there, and a new name adds a column (\code{NA} for the other runs). A run
+whose summary is not a named numeric vector is marked \code{"failed"} with
+the reason in \verb{$messages}.}
 
 \item{keep}{Keep the full results (\code{TRUE}) or only the summaries.}
 
@@ -55,8 +60,11 @@ parameter values.}
 }
 \value{
 A \code{sim_sweep} object with elements \code{parameters}, \code{results} (when
-\code{keep = TRUE}), \code{status} and \code{summary} (a data frame of parameters and
-summary values).
+\code{keep = TRUE}), \code{status}, \code{messages} and \code{summary}. \code{parameters} has one
+row per run, a \code{run} column and one column per parameter that any run
+sets; a run that does not set a parameter shows the model's value.
+Vector-valued parameters are list columns. \code{summary} is \code{parameters}
+joined with the summary values and the run status.
 }
 \description{
 \code{sim_sweep()} runs one simulation per row of \code{parameters}, a data frame
@@ -66,9 +74,14 @@ dependency analysis whenever the structure is unchanged.
 }
 \details{
 \code{sim_monte_carlo()} draws \code{n} parameter sets with \code{sampler(i)} under a
-fixed \code{seed} and runs them like a sweep. The caller's random number
-stream is saved and restored, so the experiment is reproducible and does
-not disturb the global random state.
+fixed \code{seed} and runs them like a sweep. The sampler runs with the
+Mersenne-Twister, Inversion and Rejection generators whatever the
+caller's \code{\link[=RNGkind]{RNGkind()}}, so the draws are reproducible. Afterwards the
+caller's \code{.Random.seed} and generator kinds are restored. One exception
+cannot be repaired from R: with \code{normal.kind = "Box-Muller"}, R keeps the
+second deviate of each pair outside \code{.Random.seed}, and that cached value
+is lost, so the caller's next normal draw differs; a warning says so.
+\code{white_noise} blocks do not use R's generator at all.
 
 With \code{cores > 1} runs use \code{\link[parallel:mclapply]{parallel::mclapply()}} (not available on
 Windows, where runs are sequential). Results do not depend on \code{cores}.

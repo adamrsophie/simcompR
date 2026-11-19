@@ -114,9 +114,10 @@ Running it again with the same seed returns identical numbers.
 
 ## Noise inputs
 
-`white_noise` blocks draw a value at each sample hit from their own seed and
-the hit index. Results are reproducible and independent of the global
-random state:
+`white_noise` blocks draw a value at each sample hit from their own seed,
+the hit index and the element index, with a counter-based generator that
+never touches R's random number generator. Results are reproducible, do
+not depend on the global random state and leave it untouched:
 
 ```{r}
 nm <- sim_model("noisy")

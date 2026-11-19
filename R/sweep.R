@@ -6,9 +6,14 @@
 #' dependency analysis whenever the structure is unchanged.
 #'
 #' `sim_monte_carlo()` draws `n` parameter sets with `sampler(i)` under a
-#' fixed `seed` and runs them like a sweep. The caller's random number
-#' stream is saved and restored, so the experiment is reproducible and does
-#' not disturb the global random state.
+#' fixed `seed` and runs them like a sweep. The sampler runs with the
+#' Mersenne-Twister, Inversion and Rejection generators whatever the
+#' caller's [RNGkind()], so the draws are reproducible. Afterwards the
+#' caller's `.Random.seed` and generator kinds are restored. One exception
+#' cannot be repaired from R: with `normal.kind = "Box-Muller"`, R keeps the
+#' second deviate of each pair outside `.Random.seed`, and that cached value
+#' is lost, so the caller's next normal draw differs; a warning says so.
+#' `white_noise` blocks do not use R's generator at all.
 #'
 #' With `cores > 1` runs use [parallel::mclapply()] (not available on
 #' Windows, where runs are sequential). Results do not depend on `cores`.
@@ -22,13 +27,21 @@
 #' @param seed Integer seed for `sampler`.
 #' @param tspan,times Passed to [sim_run()].
 #' @param summary Optional function of a `sim_result` returning a named
-#'   numeric vector. Its values are collected in `$summary`.
+#'   numeric vector with unique, nonempty names. Values are matched to
+#'   columns by name, never by position: a run that returns the names in
+#'   another order keeps their meaning, a run that omits a name gets `NA`
+#'   there, and a new name adds a column (`NA` for the other runs). A run
+#'   whose summary is not a named numeric vector is marked `"failed"` with
+#'   the reason in `$messages`.
 #' @param keep Keep the full results (`TRUE`) or only the summaries.
 #' @param cores Number of parallel workers.
 #' @param ... Further arguments for [sim_run()].
 #' @return A `sim_sweep` object with elements `parameters`, `results` (when
-#'   `keep = TRUE`), `status` and `summary` (a data frame of parameters and
-#'   summary values).
+#'   `keep = TRUE`), `status`, `messages` and `summary`. `parameters` has one
+#'   row per run, a `run` column and one column per parameter that any run
+#'   sets; a run that does not set a parameter shows the model's value.
+#'   Vector-valued parameters are list columns. `summary` is `parameters`
+#'   joined with the summary values and the run status.
 #' @examples
 #' m <- sim_model("decay", params = list(a = 1))
 #' sim_add_block(m, "integrator", "x", initial = 1)
@@ -60,6 +73,11 @@ sim_monte_carlo <- function(x, n, sampler, seed, tspan, times = NULL,
   if (!is_count(n)) sim_abort("`n` must be a positive integer.")
   if (!is.function(sampler)) sim_abort("`sampler` must be a function of the run index.")
   if (!is_scalar_number(seed)) sim_abort("`seed` must be a number.")
+  if (RNGkind()[2] == "Box-Muller") {
+    sim_warn("normal.kind is \"Box-Muller\": its cached deviate cannot be restored, ",
+             "so the next normal draw after sim_monte_carlo() differs from an ",
+             "uninterrupted stream. .Random.seed and RNGkind() are restored.")
+  }
   sets <- with_seed(seed, lapply(seq_len(n), function(i) {
     s <- sampler(i)
     check_param_list(s, "`sampler()` result")
@@ -73,8 +91,9 @@ sim_monte_carlo <- function(x, n, sampler, seed, tspan, times = NULL,
 parameter_sets <- function(parameters) {
   if (is.data.frame(parameters)) {
     if (!nrow(parameters)) sim_abort("`parameters` has no rows.")
+    # list columns hold one value per row
     return(lapply(seq_len(nrow(parameters)), function(i) {
-      as.list(parameters[i, , drop = FALSE])
+      lapply(parameters, function(col) if (is.list(col)) col[[i]] else col[i])
     }))
   }
   if (is.list(parameters) && length(parameters) && all(vapply(parameters, is.list, TRUE))) {
@@ -101,7 +120,7 @@ run_sets <- function(plan, sets, tspan, times, summary, keep, cores, ...) {
     if (inherits(r, "error")) return(fail(r))
     s <- NULL
     if (!is.null(summary) && r$success) {
-      s <- tryCatch(summary(r), error = function(e) e)
+      s <- tryCatch(check_summary(summary(r)), error = function(e) e)
       if (inherits(s, "error")) {
         return(list(result = if (keep) r, status = "failed", summary = NULL,
                     message = paste("summary failed:", conditionMessage(s))))
@@ -115,18 +134,16 @@ run_sets <- function(plan, sets, tspan, times, summary, keep, cores, ...) {
   } else {
     lapply(idx, one)
   }
-  pars <- do.call(rbind, lapply(sets, function(s) {
-    as.data.frame(lapply(s, function(v) if (length(v) == 1L && is.atomic(v)) v else I(list(v))),
-                  stringsAsFactors = FALSE)
-  }))
+  pars <- effective_parameters(plan, sets)
   status <- vapply(runs, `[[`, "", "status")
   summ <- NULL
   if (!is.null(summary)) {
     vals <- lapply(runs, `[[`, "summary")
-    template <- Find(Negate(is.null), vals)
-    if (!is.null(template)) {
-      vals <- lapply(vals, function(v) if (is.null(v)) template * NA else v)
-      summ <- cbind(pars, as.data.frame(do.call(rbind, vals)), status = status)
+    cols <- unique(unlist(lapply(vals, names)))
+    if (length(cols)) {
+      tab <- matrix(NA_real_, length(vals), length(cols), dimnames = list(NULL, cols))
+      for (i in seq_along(vals)) if (length(vals[[i]])) tab[i, names(vals[[i]])] <- vals[[i]]
+      summ <- cbind(pars, as.data.frame(tab, optional = TRUE), status = status)
     }
   }
   structure(list(parameters = pars,
@@ -135,6 +152,38 @@ run_sets <- function(plan, sets, tspan, times, summary, keep, cores, ...) {
                  messages = vapply(runs, function(r) r$message %||% "", ""),
                  summary = summ),
             class = "sim_sweep")
+}
+
+# A summary is a named numeric vector; its names identify the columns.
+check_summary <- function(s) {
+  if (!(is.numeric(s) || is.logical(s)) || !is.null(dim(s))) {
+    stop("it must return a named numeric vector, not a ", class(s)[1], ".", call. = FALSE)
+  }
+  nm <- names(s)
+  if (length(s) && (is.null(nm) || anyNA(nm) || any(!nzchar(nm)))) {
+    stop("every value it returns must have a name.", call. = FALSE)
+  }
+  if (anyDuplicated(nm)) {
+    stop("it returned duplicate names: ", paste(unique(nm[duplicated(nm)]), collapse = ", "),
+         ".", call. = FALSE)
+  }
+  if (any(nm %in% c("run", "status"))) {
+    stop("the names `run` and `status` are reserved.", call. = FALSE)
+  }
+  stats::setNames(as.numeric(s), nm)
+}
+
+# One row per run with the value each parameter actually had: the run's own
+# value, or the model's when the run does not set it.
+effective_parameters <- function(plan, sets) {
+  cols <- unique(unlist(lapply(sets, names)))
+  out <- data.frame(run = seq_along(sets))
+  for (nm in cols) {
+    v <- lapply(sets, function(s) if (nm %in% names(s)) s[[nm]] else plan$params[[nm]])
+    scalar <- all(vapply(v, function(z) is.atomic(z) && length(z) == 1L, TRUE))
+    out[[nm]] <- if (scalar) unlist(v) else I(v)
+  }
+  out
 }
 
 #' @export
