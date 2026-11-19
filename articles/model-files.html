@@ -198,26 +198,30 @@ read.</p>
 <td>numeric matrix</td>
 </tr>
 <tr class="odd">
-<td>
-<code>{"$chr": [...]}</code>, <code>{"$lgl": [...]}</code>,
-<code>{"$list": [...]}</code>
-</td>
-<td>other vectors and lists</td>
+<td><code>{"$int": ["1", "NA"]}</code></td>
+<td>integer vector</td>
 </tr>
 <tr class="even">
+<td>
+<code>{"$chr": ["a", null]}</code>, <code>{"$lgl": [...]}</code>,
+<code>{"$list": [...]}</code>
+</td>
+<td>other vectors and lists; <code>null</code> is a missing string</td>
+</tr>
+<tr class="odd">
 <td><code>{"$param": "k"}</code></td>
 <td><code>sim_param("k")</code></td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code>{"$param_expr": "-k / 2"}</code></td>
 <td>
 <code>-sim_param("k") / 2</code>, a parameter expression</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><code>{"$model": {...}}</code></td>
 <td>nested subsystem</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code>{"$transition": {...}}</code></td>
 <td><code><a href="../reference/sim_transition.html">sim_transition()</a></code></td>
 </tr>
@@ -239,6 +243,12 @@ state machine guards and actions given as strings;</li>
 <li>subsystems and their instance parameters;</li>
 <li>user block types registered with <code>portable = TRUE</code>.</li>
 </ul>
+<p>Values must read back unchanged. Numeric, integer, logical and
+character vectors (with missing values and names), plain numeric
+matrices, lists of these and parameter references are saved exactly.
+Arrays with more than two dimensions, matrices with dimension names or
+of another type, factors, data frames and other classed values are
+refused when the model is written.</p>
 <p>R functions cannot be represented safely. A model that contains them
 is refused, with the offending block named, instead of being saved
 without them:</p>

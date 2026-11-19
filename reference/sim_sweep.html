@@ -123,7 +123,12 @@ list of named lists.</p></dd>
 
 <dt id="arg-summary">summary<a class="anchor" aria-label="anchor" href="#arg-summary"></a></dt>
 <dd><p>Optional function of a <code>sim_result</code> returning a named
-numeric vector. Its values are collected in <code>$summary</code>.</p></dd>
+numeric vector with unique, nonempty names. Values are matched to
+columns by name, never by position: a run that returns the names in
+another order keeps their meaning, a run that omits a name gets <code>NA</code>
+there, and a new name adds a column (<code>NA</code> for the other runs). A run
+whose summary is not a named numeric vector is marked <code>"failed"</code> with
+the reason in <code>$messages</code>.</p></dd>
 
 
 <dt id="arg-keep">keep<a class="anchor" aria-label="anchor" href="#arg-keep"></a></dt>
@@ -154,15 +159,23 @@ parameter values.</p></dd>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A <code>sim_sweep</code> object with elements <code>parameters</code>, <code>results</code> (when
-<code>keep = TRUE</code>), <code>status</code> and <code>summary</code> (a data frame of parameters and
-summary values).</p>
+<code>keep = TRUE</code>), <code>status</code>, <code>messages</code> and <code>summary</code>. <code>parameters</code> has one
+row per run, a <code>run</code> column and one column per parameter that any run
+sets; a run that does not set a parameter shows the model's value.
+Vector-valued parameters are list columns. <code>summary</code> is <code>parameters</code>
+joined with the summary values and the run status.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p><code>sim_monte_carlo()</code> draws <code>n</code> parameter sets with <code>sampler(i)</code> under a
-fixed <code>seed</code> and runs them like a sweep. The caller's random number
-stream is saved and restored, so the experiment is reproducible and does
-not disturb the global random state.</p>
+fixed <code>seed</code> and runs them like a sweep. The sampler runs with the
+Mersenne-Twister, Inversion and Rejection generators whatever the
+caller's <code><a href="https://rdrr.io/r/base/Random.html" class="external-link">RNGkind()</a></code>, so the draws are reproducible. Afterwards the
+caller's <code>.Random.seed</code> and generator kinds are restored. One exception
+cannot be repaired from R: with <code>normal.kind = "Box-Muller"</code>, R keeps the
+second deviate of each pair outside <code>.Random.seed</code>, and that cached value
+is lost, so the caller's next normal draw differs; a warning says so.
+<code>white_noise</code> blocks do not use R's generator at all.</p>
 <p>With <code>cores &gt; 1</code> runs use <code><a href="https://rdrr.io/r/parallel/mclapply.html" class="external-link">parallel::mclapply()</a></code> (not available on
 Windows, where runs are sequential). Results do not depend on <code>cores</code>.</p>
     </div>
@@ -179,20 +192,20 @@ Windows, where runs are sequential). Results do not depend on <code>cores</code>
 <span class="r-in"><span><span class="va">s</span> <span class="op">&lt;-</span> <span class="fu">sim_sweep</span><span class="op">(</span><span class="va">m</span>, <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.5</span>, <span class="fl">1</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span>, tspan <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  summary <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">r</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>x_end <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">tail</a></span><span class="op">(</span><span class="fu"><a href="sim_signal.html">sim_signal</a></span><span class="op">(</span><span class="va">r</span>, <span class="st">"x"</span><span class="op">)</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">s</span><span class="op">$</span><span class="va">summary</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     a     x_end  status</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1 0.5 0.6065307 success</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2 1.0 0.3678794 success</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3 2.0 0.1353353 success</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   run   a     x_end  status</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1   1 0.5 0.6065307 success</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2   2 1.0 0.3678794 success</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3   3 2.0 0.1353353 success</span>
 <span class="r-in"><span><span class="va">mc</span> <span class="op">&lt;-</span> <span class="fu">sim_monte_carlo</span><span class="op">(</span><span class="va">m</span>, n <span class="op">=</span> <span class="fl">5</span>, sampler <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">i</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/Uniform.html" class="external-link">runif</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>  seed <span class="op">=</span> <span class="fl">42</span>, tspan <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>, keep <span class="op">=</span> <span class="cn">FALSE</span>,</span></span>
 <span class="r-in"><span>  summary <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">r</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>x_end <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">tail</a></span><span class="op">(</span><span class="fu"><a href="sim_signal.html">sim_signal</a></span><span class="op">(</span><span class="va">r</span>, <span class="st">"x"</span><span class="op">)</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">mc</span><span class="op">$</span><span class="va">summary</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>           a     x_end  status</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1 1.8296121 0.1604758 success</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2 1.8741508 0.1534852 success</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3 0.5722791 0.5642380 success</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4 1.6608953 0.1899688 success</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 5 1.2834910 0.2770683 success</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   run         a     x_end  status</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1   1 1.8296121 0.1604758 success</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2   2 1.8741508 0.1534852 success</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3   3 0.5722791 0.5642380 success</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4   4 1.6608953 0.1899688 success</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5   5 1.2834910 0.2770683 success</span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

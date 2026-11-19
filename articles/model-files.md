@@ -92,7 +92,8 @@ Encoded values:
 |----|----|
 | `{"$num": ["0.10000000000000001"]}` | numeric vector, exact |
 | `{"$matrix": {"nrow": 2, "ncol": 2, "data": [...]}}` | numeric matrix |
-| `{"$chr": [...]}`, `{"$lgl": [...]}`, `{"$list": [...]}` | other vectors and lists |
+| `{"$int": ["1", "NA"]}` | integer vector |
+| `{"$chr": ["a", null]}`, `{"$lgl": [...]}`, `{"$list": [...]}` | other vectors and lists; `null` is a missing string |
 | `{"$param": "k"}` | `sim_param("k")` |
 | `{"$param_expr": "-k / 2"}` | `-sim_param("k") / 2`, a parameter expression |
 | `{"$model": {...}}` | nested subsystem |
@@ -110,6 +111,13 @@ Everything that is declarative is portable:
   guards and actions given as strings;
 - subsystems and their instance parameters;
 - user block types registered with `portable = TRUE`.
+
+Values must read back unchanged. Numeric, integer, logical and character
+vectors (with missing values and names), plain numeric matrices, lists
+of these and parameter references are saved exactly. Arrays with more
+than two dimensions, matrices with dimension names or of another type,
+factors, data frames and other classed values are refused when the model
+is written.
 
 R functions cannot be represented safely. A model that contains them is
 refused, with the offending block named, instead of being saved without

@@ -129,10 +129,19 @@ hit depend on the inputs at the same hit (direct feedthrough).</p>
 is an expression in <code>u</code> (the input vector), <code>t</code>, <code>elapsed</code> (time in the
 current state), the data variables and the parameters of the enclosing
 model or subsystem. An action string assigns data
-variables, for example <code>"count &lt;- count + 1"</code>. A guard function has
+variables, for example <code>"count &lt;- count + 1"</code>; each data variable must
+still hold one finite number afterwards. A guard function has
 signature <code>function(u, t, elapsed, data)</code> and returns <code>TRUE</code> or <code>FALSE</code>;
 an action function has signature <code>function(data, u, t)</code> and returns the
-new named data vector.</p>
+new data vector: either unnamed with one value per variable, in the
+order of <code>data</code>, or named with exactly the data variable names, in any
+order (values are matched by name). Guards and actions must be pure
+functions of their arguments, because the block evaluates them to
+compute its outputs and again to compute its next state.</p>
+<p><code>after</code> compares the time spent in the state, <code>t - entry time</code>, with
+the requested duration, allowing only for the rounding of that
+subtraction, so the behavior does not depend on where the time axis
+starts.</p>
 <p>The block's parameters are <code>states</code> (character), <code>initial</code> (state name),
 <code>transitions</code> (a list of <code>sim_transition()</code>), <code>entry</code>, <code>exit</code>, <code>during</code>
 (named lists of actions by state), <code>data</code> (named numeric initial values

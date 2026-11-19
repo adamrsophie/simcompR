@@ -3,7 +3,13 @@
 Models are written as versioned, declarative JSON: block types, names,
 parameters, connections, events and nested subsystems. Numbers are
 stored as strings with 17 significant digits, so they read back
-bit-for-bit, and matrices keep their dimensions.
+bit-for-bit; integer, logical and character vectors keep their type,
+missing values and names, and numeric matrices keep their dimensions. A
+value that could not be read back unchanged (an array with more than two
+dimensions, a matrix that is not numeric or has dimension names, a
+factor, a data frame, or any other value with a class or attributes
+other than names) is rejected when the model is written, instead of
+being saved in a different form.
 
 ## Usage
 

@@ -55,8 +55,13 @@ sim_monte_carlo(
 
 - summary:
 
-  Optional function of a `sim_result` returning a named numeric vector.
-  Its values are collected in `$summary`.
+  Optional function of a `sim_result` returning a named numeric vector
+  with unique, nonempty names. Values are matched to columns by name,
+  never by position: a run that returns the names in another order keeps
+  their meaning, a run that omits a name gets `NA` there, and a new name
+  adds a column (`NA` for the other runs). A run whose summary is not a
+  named numeric vector is marked `"failed"` with the reason in
+  `$messages`.
 
 - keep:
 
@@ -86,15 +91,24 @@ sim_monte_carlo(
 ## Value
 
 A `sim_sweep` object with elements `parameters`, `results` (when
-`keep = TRUE`), `status` and `summary` (a data frame of parameters and
-summary values).
+`keep = TRUE`), `status`, `messages` and `summary`. `parameters` has one
+row per run, a `run` column and one column per parameter that any run
+sets; a run that does not set a parameter shows the model's value.
+Vector-valued parameters are list columns. `summary` is `parameters`
+joined with the summary values and the run status.
 
 ## Details
 
 `sim_monte_carlo()` draws `n` parameter sets with `sampler(i)` under a
-fixed `seed` and runs them like a sweep. The caller's random number
-stream is saved and restored, so the experiment is reproducible and does
-not disturb the global random state.
+fixed `seed` and runs them like a sweep. The sampler runs with the
+Mersenne-Twister, Inversion and Rejection generators whatever the
+caller's [`RNGkind()`](https://rdrr.io/r/base/Random.html), so the draws
+are reproducible. Afterwards the caller's `.Random.seed` and generator
+kinds are restored. One exception cannot be repaired from R: with
+`normal.kind = "Box-Muller"`, R keeps the second deviate of each pair
+outside `.Random.seed`, and that cached value is lost, so the caller's
+next normal draw differs; a warning says so. `white_noise` blocks do not
+use R's generator at all.
 
 With `cores > 1` runs use
 [`parallel::mclapply()`](https://rdrr.io/r/parallel/mclapply.html) (not
@@ -114,18 +128,18 @@ sim_connect(m, "neg", "x")
 s <- sim_sweep(m, data.frame(a = c(0.5, 1, 2)), tspan = c(0, 1),
   summary = function(r) c(x_end = tail(sim_signal(r, "x"), 1)))
 s$summary
-#>     a     x_end  status
-#> 1 0.5 0.6065307 success
-#> 2 1.0 0.3678794 success
-#> 3 2.0 0.1353353 success
+#>   run   a     x_end  status
+#> 1   1 0.5 0.6065307 success
+#> 2   2 1.0 0.3678794 success
+#> 3   3 2.0 0.1353353 success
 mc <- sim_monte_carlo(m, n = 5, sampler = function(i) list(a = runif(1, 0, 2)),
   seed = 42, tspan = c(0, 1), keep = FALSE,
   summary = function(r) c(x_end = tail(sim_signal(r, "x"), 1)))
 mc$summary
-#>           a     x_end  status
-#> 1 1.8296121 0.1604758 success
-#> 2 1.8741508 0.1534852 success
-#> 3 0.5722791 0.5642380 success
-#> 4 1.6608953 0.1899688 success
-#> 5 1.2834910 0.2770683 success
+#>   run         a     x_end  status
+#> 1   1 1.8296121 0.1604758 success
+#> 2   2 1.8741508 0.1534852 success
+#> 3   3 0.5722791 0.5642380 success
+#> 4   4 1.6608953 0.1899688 success
+#> 5   5 1.2834910 0.2770683 success
 ```

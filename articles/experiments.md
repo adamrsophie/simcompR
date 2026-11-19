@@ -67,11 +67,11 @@ peak <- function(r) {
 s <- sim_sweep(plan, dens, tspan = c(0, 15), times = seq(0, 15, 0.01), summary = peak)
 s
 #> <sim_sweep> 4 run(s): success = 4
-#>         den     peak settle  status
-#> 1 1, 0.4, 4 1.729245  14.84 success
-#> 2 1, 1.2, 4 1.372318   5.61 success
-#> 3 1, 2.8, 4 1.045988   2.98 success
-#> 4   1, 4, 4 1.000000   2.91 success
+#>   run       den     peak settle  status
+#> 1   1 1, 0.4, 4 1.729245  14.84 success
+#> 2   2 1, 1.2, 4 1.372318   5.61 success
+#> 3   3 1, 2.8, 4 1.045988   2.98 success
+#> 4   4   1, 4, 4 1.000000   2.91 success
 cbind(zeta = c(0.1, 0.3, 0.7, 1), s$summary[c("peak", "settle")],
       exact_peak = c(1 + exp(-pi * c(0.1, 0.3, 0.7) / sqrt(1 - c(0.1, 0.3, 0.7)^2)), 1))
 #>   zeta     peak settle exact_peak
@@ -134,9 +134,11 @@ Running it again with the same seed returns identical numbers.
 
 ## Noise inputs
 
-`white_noise` blocks draw a value at each sample hit from their own seed
-and the hit index. Results are reproducible and independent of the
-global random state:
+`white_noise` blocks draw a value at each sample hit from their own
+seed, the hit index and the element index, with a counter-based
+generator that never touches R’s random number generator. Results are
+reproducible, do not depend on the global random state and leave it
+untouched:
 
 ``` r
 

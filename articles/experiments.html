@@ -153,11 +153,11 @@ reduces each result to named numbers.</p>
 <span><span class="va">s</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_sweep.html">sim_sweep</a></span><span class="op">(</span><span class="va">plan</span>, <span class="va">dens</span>, tspan <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">15</span><span class="op">)</span>, times <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">15</span>, <span class="fl">0.01</span><span class="op">)</span>, summary <span class="op">=</span> <span class="va">peak</span><span class="op">)</span></span>
 <span><span class="va">s</span></span>
 <span><span class="co">#&gt; &lt;sim_sweep&gt; 4 run(s): success = 4</span></span>
-<span><span class="co">#&gt;         den     peak settle  status</span></span>
-<span><span class="co">#&gt; 1 1, 0.4, 4 1.729245  14.84 success</span></span>
-<span><span class="co">#&gt; 2 1, 1.2, 4 1.372318   5.61 success</span></span>
-<span><span class="co">#&gt; 3 1, 2.8, 4 1.045988   2.98 success</span></span>
-<span><span class="co">#&gt; 4   1, 4, 4 1.000000   2.91 success</span></span>
+<span><span class="co">#&gt;   run       den     peak settle  status</span></span>
+<span><span class="co">#&gt; 1   1 1, 0.4, 4 1.729245  14.84 success</span></span>
+<span><span class="co">#&gt; 2   2 1, 1.2, 4 1.372318   5.61 success</span></span>
+<span><span class="co">#&gt; 3   3 1, 2.8, 4 1.045988   2.98 success</span></span>
+<span><span class="co">#&gt; 4   4   1, 4, 4 1.000000   2.91 success</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span>zeta <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.1</span>, <span class="fl">0.3</span>, <span class="fl">0.7</span>, <span class="fl">1</span><span class="op">)</span>, <span class="va">s</span><span class="op">$</span><span class="va">summary</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"peak"</span>, <span class="st">"settle"</span><span class="op">)</span><span class="op">]</span>,</span>
 <span>      exact_peak <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="op">-</span><span class="va">pi</span> <span class="op">*</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.1</span>, <span class="fl">0.3</span>, <span class="fl">0.7</span><span class="op">)</span> <span class="op">/</span> <span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="fl">1</span> <span class="op">-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.1</span>, <span class="fl">0.3</span>, <span class="fl">0.7</span><span class="op">)</span><span class="op">^</span><span class="fl">2</span><span class="op">)</span><span class="op">)</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;   zeta     peak settle exact_peak</span></span>
@@ -210,8 +210,10 @@ experiment is reproducible and does not disturb other random code:</p>
 <h2 id="noise-inputs">Noise inputs<a class="anchor" aria-label="anchor" href="#noise-inputs"></a>
 </h2>
 <p><code>white_noise</code> blocks draw a value at each sample hit from
-their own seed and the hit index. Results are reproducible and
-independent of the global random state:</p>
+their own seed, the hit index and the element index, with a
+counter-based generator that never touches R’s random number generator.
+Results are reproducible, do not depend on the global random state and
+leave it untouched:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">nm</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"noisy"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">nm</span>, <span class="st">"white_noise"</span>, <span class="st">"w"</span>, sd <span class="op">=</span> <span class="fl">0.2</span>, period <span class="op">=</span> <span class="fl">0.05</span>, seed <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span>
