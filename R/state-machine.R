@@ -26,10 +26,20 @@
 #' is an expression in `u` (the input vector), `t`, `elapsed` (time in the
 #' current state), the data variables and the parameters of the enclosing
 #' model or subsystem. An action string assigns data
-#' variables, for example `"count <- count + 1"`. A guard function has
+#' variables, for example `"count <- count + 1"`; each data variable must
+#' still hold one finite number afterwards. A guard function has
 #' signature `function(u, t, elapsed, data)` and returns `TRUE` or `FALSE`;
 #' an action function has signature `function(data, u, t)` and returns the
-#' new named data vector.
+#' new data vector: either unnamed with one value per variable, in the
+#' order of `data`, or named with exactly the data variable names, in any
+#' order (values are matched by name). Guards and actions must be pure
+#' functions of their arguments, because the block evaluates them to
+#' compute its outputs and again to compute its next state.
+#'
+#' `after` compares the time spent in the state, `t - entry time`, with
+#' the requested duration, allowing only for the rounding of that
+#' subtraction, so the behavior does not depend on where the time axis
+#' starts.
 #'
 #' The block's parameters are `states` (character), `initial` (state name),
 #' `transitions` (a list of `sim_transition()`), `entry`, `exit`, `during`
@@ -131,15 +141,52 @@ sim_check_state_machine <- function(states, transitions, initial = states[1]) {
 
 compile_action <- function(a, what, scope = list()) {
   if (is.null(a)) return(NULL)
-  if (is.function(a)) return(a)
+  if (is.function(a)) {
+    return(function(data, u, t) align_data(a(data, u, t), data, what))
+  }
   e <- parse_safe(a, what)
   function(data, u, t) {
     env <- safe_frame(c(scope, as.list(data), list(u = u, t = t)))
     eval(e, env)
-    out <- vapply(names(data), function(n) as.numeric(get(n, envir = env))[1], 0)
+    out <- vapply(names(data), function(n) {
+      v <- get(n, envir = env)
+      if (!is.numeric(v) && !is.logical(v) || length(v) != 1L || !is.finite(v)) {
+        sim_abort(what, " left data variable '", n, "' as ", deparse_short(v),
+                  "; data variables hold one finite number.")
+      }
+      as.numeric(v)
+    }, 0)
     names(out) <- names(data)
     out
   }
+}
+
+# The data vector returned by an action function: unnamed values in the
+# order of the data variables, or named values matched by name.
+align_data <- function(v, data, what) {
+  if (!is.numeric(v) && !is.logical(v)) {
+    sim_abort(what, " must return a numeric data vector, not a ", class(v)[1], ".")
+  }
+  nm <- names(v)
+  if (!is.null(nm)) {
+    if (anyDuplicated(nm) || !setequal(nm, names(data)) || length(v) != length(data)) {
+      sim_abort(what, " returned names {", paste(nm, collapse = ", "), "}; expected ",
+                "exactly the data variables {", paste(names(data), collapse = ", "), "}.")
+    }
+    v <- v[names(data)]
+  } else if (length(v) != length(data)) {
+    sim_abort(what, " returned ", length(v), " value(s); there are ", length(data),
+              " data variable(s).")
+  }
+  v <- as.numeric(v)
+  if (any(!is.finite(v))) sim_abort(what, " returned a non-finite data value.")
+  names(v) <- names(data)
+  v
+}
+
+deparse_short <- function(v) {
+  s <- paste(deparse(v, width.cutoff = 60L), collapse = " ")
+  if (nchar(s) > 60L) paste0(substr(s, 1L, 57L), "...") else s
 }
 
 compile_guard <- function(g, what, scope = list()) {
@@ -167,8 +214,19 @@ register_state_machine_block <- function() {
       initial <- if (is.na(p$initial[1])) states[1] else p$initial
       sim_check_state_machine(states, p$transitions, initial)
       data0 <- p$data
-      if (length(data0) && (!is.numeric(data0) || is.null(names(data0)))) {
-        sim_abort("`data` must be a named numeric vector.")
+      if (length(data0)) {
+        dn <- names(data0)
+        if (!is.numeric(data0) || is.null(dn) || anyNA(dn) || any(!nzchar(dn))) {
+          sim_abort("`data` must be a named numeric vector.")
+        }
+        if (anyDuplicated(dn)) {
+          sim_abort("`data` has duplicate names: ", paste(unique(dn[duplicated(dn)]), collapse = ", "), ".")
+        }
+        reserved <- intersect(dn, c("u", "t", "elapsed", "data"))
+        if (length(reserved)) {
+          sim_abort("`data` must not use the reserved name(s) ", paste(reserved, collapse = ", "), ".")
+        }
+        if (any(!is.finite(data0))) sim_abort("`data` values must be finite.")
       }
       data0 <- as.numeric(data0)
       names(data0) <- names(p$data)
@@ -201,11 +259,15 @@ register_state_machine_block <- function() {
       nin <- p$n_inputs
       if (!is_count(nin)) sim_abort("`n_inputs` must be a positive integer.")
       nvar <- length(data0)
+      # outgoing transitions of each state, already in priority order
+      by_state <- lapply(seq_along(states), function(s) Filter(function(tr) tr$from == s, trs))
       run <- function(s, entered, data, u, t) {
         v <- unlist(u, use.names = FALSE)
-        for (tr in trs) {
-          if (tr$from != s) next
-          if (t - entered < tr$after - 1e-9 * max(1, abs(t))) next
+        elapsed <- t - entered
+        # only the rounding of t - entered is forgiven, never a fraction of t
+        slack <- 8 * .Machine$double.eps * max(1, abs(t), abs(entered))
+        for (tr in by_state[[s]]) {
+          if (elapsed < tr$after - slack) next
           if (!tr$guard(v, t, t - entered, data)) next
           if (!is.null(acts$exit[[s]])) data <- acts$exit[[s]](data, v, t)
           if (!is.null(tr$action)) data <- tr$action(data, v, t)
@@ -216,9 +278,13 @@ register_state_machine_block <- function() {
         list(s = s, entered = entered, data = data)
       }
       unpack <- function(d) {
+        s <- d[[1]]
+        if (!is.finite(s) || s != round(s) || s < 1 || s > length(states)) {
+          sim_abort("state index ", format(s), " is not one of 1..", length(states), ".")
+        }
         data <- d[seq_len(nvar) + 2L]
         names(data) <- names(data0)
-        list(s = d[[1]], entered = d[[2]], data = data)
+        list(s = s, entered = d[[2]], data = data)
       }
       make_out <- function(s, data) {
         o <- list(state = s)
@@ -253,6 +319,12 @@ register_state_machine_block <- function() {
              r <- run(st$s, st$entered, st$data, u, t)
              c(r$s, r$entered, r$data)
            },
-           held0 = function(size) make_out(s0, data0))
+           # entry time -Inf means "not entered yet": the one non-finite
+           # value this block's state may hold
+           nonfinite_ok = 2L,
+           held0 = function(size, d0) {
+             st <- unpack(d0)
+             make_out(st$s, st$data)
+           })
     })
 }

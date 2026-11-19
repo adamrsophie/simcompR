@@ -56,10 +56,20 @@ Guards and actions are portable strings or R functions. A guard string
 is an expression in \code{u} (the input vector), \code{t}, \code{elapsed} (time in the
 current state), the data variables and the parameters of the enclosing
 model or subsystem. An action string assigns data
-variables, for example \code{"count <- count + 1"}. A guard function has
+variables, for example \code{"count <- count + 1"}; each data variable must
+still hold one finite number afterwards. A guard function has
 signature \verb{function(u, t, elapsed, data)} and returns \code{TRUE} or \code{FALSE};
 an action function has signature \verb{function(data, u, t)} and returns the
-new named data vector.
+new data vector: either unnamed with one value per variable, in the
+order of \code{data}, or named with exactly the data variable names, in any
+order (values are matched by name). Guards and actions must be pure
+functions of their arguments, because the block evaluates them to
+compute its outputs and again to compute its next state.
+
+\code{after} compares the time spent in the state, \verb{t - entry time}, with
+the requested duration, allowing only for the rounding of that
+subtraction, so the behavior does not depend on where the time axis
+starts.
 
 The block's parameters are \code{states} (character), \code{initial} (state name),
 \code{transitions} (a list of \code{sim_transition()}), \code{entry}, \code{exit}, \code{during}
