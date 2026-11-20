@@ -122,9 +122,7 @@ sim_add_block <- function(model, type, name, ...) {
     sim_abort("Model '", model$name, "' already has a block named '", name, "'.")
   }
   type_def <- get_block_type(type)
-  if (length(params) && (is.null(names(params)) || any(!nzchar(names(params))))) {
-    sim_abort("Block parameters must be named.")
-  }
+  check_param_keys(params, paste0("Block '", name, "'"))
   unknown <- setdiff(names(params), names(type_def$params))
   if (length(unknown)) {
     sim_abort("Block '", name, "' (", type, "): unknown parameter(s) ",
@@ -329,10 +327,7 @@ sim_set_block_params <- function(model, block, ...) {
   block <- block_name_of(model, block, "block")
   b <- model$blocks[[block]]
   type_def <- get_block_type(b$type)
-  if (length(new) && (is.null(names(new)) || any(!nzchar(names(new))))) {
-    sim_abort("Block parameters must be named, for example sim_set_block_params(m, \"",
-              block, "\", gain = 2).")
-  }
+  check_param_keys(new, paste0("Block '", block, "'"))
   unknown <- setdiff(names(new), names(type_def$params))
   if (length(unknown)) {
     sim_abort("Block '", block, "': unknown parameter(s) ",
@@ -445,4 +440,21 @@ copy_nested <- function(v) {
     attributes(v) <- a
   }
   v
+}
+
+# Parameter lists of a block: every value named, each name once. A repeated
+# name is ambiguous (R takes the first, `[<-` the last), so it is refused
+# when a block is created or edited and when a model is written or read.
+check_param_keys <- function(params, who) {
+  if (!length(params)) return(invisible())
+  nm <- names(params)
+  if (is.null(nm) || anyNA(nm) || any(!nzchar(nm))) {
+    sim_abort(who, ": parameters must be named, for example gain = 2.")
+  }
+  dup <- unique(nm[duplicated(nm)])
+  if (length(dup)) {
+    sim_abort(who, ": parameter ", paste0("'", dup, "'", collapse = ", "),
+              " is given more than once.")
+  }
+  invisible()
 }

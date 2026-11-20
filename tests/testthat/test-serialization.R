@@ -152,3 +152,38 @@ test_that("malformed model files are rejected", {
   j$events[[1]]$terminal <- "typo"
   expect_error(sim_model_from_list(j), "not true or false")
 })
+
+test_that("malformed numbers are refused promptly", {
+  f <- tempfile(fileext = ".json")
+  on.exit(unlink(f))
+  m <- sim_model(params = list(a = 1))
+  sim_write_json(m, f)
+  txt <- readLines(f, warn = FALSE)
+  for (bad in c("0x1p+10000000000000000000", "0x1p+1100", "0x1p-1200", "0x1p+1024")) {
+    writeLines(sub('"1"', paste0('"', bad, '"'), txt, fixed = TRUE), f)
+    t0 <- proc.time()[["elapsed"]]
+    expect_error(sim_read_json(f), "Invalid number")
+    expect_lt(proc.time()[["elapsed"]] - t0, 5)
+  }
+})
+
+test_that("subnormal and signed values round trip bit for bit", {
+  v <- c(5e-324, -5e-324, 2.5e-310, .Machine$double.xmin, -0, 1/3)
+  f <- tempfile(fileext = ".json")
+  on.exit(unlink(f))
+  sim_write_json(sim_model(params = list(v = v)), f)
+  expect_identical(writeBin(sim_read_json(f)$params$v, raw()), writeBin(v, raw()))
+})
+
+test_that("encoded values load whatever the order of their members", {
+  f <- tempfile(fileext = ".json")
+  on.exit(unlink(f))
+  sim_write_json(sim_model(params = list(v = c(a = 1, b = 2))), f)
+  x <- jsonlite::read_json(f)
+  x$params$v <- rev(x$params$v)
+  jsonlite::write_json(x, f, auto_unbox = TRUE)
+  expect_identical(sim_read_json(f)$params$v, c(a = 1, b = 2))
+  x$params$v[["$chr"]] <- list("x")
+  jsonlite::write_json(x, f, auto_unbox = TRUE)
+  expect_error(sim_read_json(f), "exactly one")
+})

@@ -196,7 +196,14 @@ effective_parameters <- function(plan, sets) {
   for (nm in cols) {
     v <- lapply(sets, function(s) if (nm %in% names(s)) s[[nm]] else plan$params[[nm]])
     scalar <- all(vapply(v, function(z) is.atomic(z) && length(z) == 1L, TRUE))
-    out[[nm]] <- if (scalar) unlist(v) else I(v)
+    # one plain column only when the values share their type and class
+    # (a Date stays a Date); otherwise a list column keeps each value as is
+    attrs <- lapply(v, function(z) { a <- attributes(z); a$names <- NULL; a })
+    same <- scalar && all(vapply(attrs, identical, TRUE, attrs[[1]]))
+    out[[nm]] <- if (!same) I(v) else if (is.null(attrs[[1]])) unlist(v, use.names = FALSE) else {
+      col <- do.call(c, unname(v))
+      if (length(col) == length(v) && identical(class(col), class(v[[1]]))) col else I(v)
+    }
   }
   out
 }

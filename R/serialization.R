@@ -141,6 +141,7 @@ sim_model_from_list <- function(x) {
 }
 
 encode_params <- function(params, where) {
+  check_param_keys(params, where)
   out <- lapply(names(params), function(n) enc(params[[n]], paste0(where, " parameter '", n, "'")))
   names(out) <- names(params)
   if (!length(out)) return(structure(list(), names = character()))
@@ -166,6 +167,19 @@ num_str <- function(v) {
     (a >= 1e-7 & a < 1e15 & suppressWarnings(as.numeric(out)) == v)
   exact[is.na(exact)] <- TRUE
   out[!exact] <- sprintf("%a", v[!exact])
+  # subnormals as 0x0.<13 hex digits>p-1022: R's parser (4.6) reads
+  # 0x1p-1074 as zero, but this form exactly
+  sub <- !exact & a < .Machine$double.xmin & v != 0
+  sub[is.na(sub)] <- FALSE
+  if (any(sub)) {
+    mant <- a[sub] * 2^1022 * 2^52
+    hx <- vapply(mant, function(m) {
+      h <- character(13)
+      for (i in 13:1) { h[i] <- sprintf("%x", as.integer(m %% 16)); m <- m %/% 16 }
+      paste(h, collapse = "")
+    }, "")
+    out[sub] <- paste0(ifelse(v[sub] < 0, "-", ""), "0x0.", hx, "p-1022")
+  }
   out[is.na(v)] <- "NA"
   out[is.nan(v)] <- "NaN"
   out
@@ -176,23 +190,33 @@ num_parse <- function(s) {
   v <- suppressWarnings(as.numeric(s))
   hex <- grepl("^[+-]?0[xX]", s)
   v[hex] <- vapply(s[hex], hex_double, 0)
+  bad <- is.na(v) & !s %in% c("NA", "NaN")
+  if (any(bad)) {
+    sim_abort("Invalid number '", substr(s[bad][1], 1, 40), "' in model file.")
+  }
   v
 }
 
 # Exact value of a C99 hexadecimal floating constant such as 0x1.8p+3. The
-# significand is an integer below 2^53 and the scaling by powers of two
-# is exact because the value is a double.
+# significand is an integer below 2^56 with at most 14 hex digits, and the
+# exponent must be one a double can carry (|exponent| <= 1100 before the
+# fraction digits are taken out); anything else is refused, so decoding is
+# bounded. A value that rounds to zero or overflows is refused too: files
+# written by simcompR never contain one.
 hex_double <- function(s) {
-  m <- regmatches(s, regexec("^([+-]?)0[xX]([0-9a-fA-F]*)(?:[.]([0-9a-fA-F]*))?[pP]([+-]?[0-9]+)$", s))[[1]]
+  m <- regmatches(s, regexec("^([+-]?)0[xX]([0-9a-fA-F]*)(?:[.]([0-9a-fA-F]*))?[pP]([+-]?[0-9]{1,5})$", s))[[1]]
   if (!length(m)) return(NA_real_)
   digits <- c(strsplit(m[3], "")[[1]], strsplit(m[4], "")[[1]])
-  if (length(digits) > 14L) return(NA_real_)
+  if (!length(digits) || length(digits) > 14L) return(NA_real_)
+  if (abs(as.numeric(m[5])) > 1100) return(NA_real_)
   v <- 0
   for (h in digits) v <- v * 16 + strtoi(h, 16L)
   e <- as.numeric(m[5]) - 4 * nchar(m[4])
   while (e > 1000) { v <- v * 2^1000; e <- e - 1000 }
   while (e < -1000) { v <- v * 2^-1000; e <- e + 1000 }
+  nonzero <- v != 0
   v <- v * 2^e
+  if (!is.finite(v) || (nonzero && v == 0)) return(NA_real_)
   if (m[2] == "-") -v else v
 }
 
@@ -267,9 +291,26 @@ dec_chr <- function(items) {
   vapply(items, function(s) if (is.null(s)) NA_character_ else as.character(s), "")
 }
 
+value_tags <- c("$null", "$param", "$param_expr", "$model", "$transition", "$matrix",
+                "$num", "$int", "$chr", "$lgl", "$list")
+
 dec <- function(x) {
   if (!is.list(x) || !length(x)) return(x)
-  key <- names(x)[1]
+  # exactly one type tag, found by name: JSON member order carries no meaning
+  keys <- names(x)
+  tags <- keys[startsWith(keys %||% character(length(x)), "$")]
+  if (length(tags) != 1L || !tags %in% value_tags) {
+    sim_abort("Model file has an encoded value with ",
+              if (!length(tags)) "no type tag" else paste0("tag(s) ", paste0("'", tags, "'", collapse = ", ")),
+              "; expected exactly one of ", paste(value_tags, collapse = ", "), ".")
+  }
+  extra <- setdiff(keys, c(tags, "names"))
+  if (length(extra)) {
+    sim_abort("Model file has an encoded value with unexpected field(s) ",
+              paste0("'", extra, "'", collapse = ", "), ".")
+  }
+  key <- tags
+  x <- c(x[key], x[setdiff(keys, key)])
   nm <- if (!is.null(x$names)) dec_chr(x$names) else NULL
   v <- switch(key,
     `$null` = NULL,

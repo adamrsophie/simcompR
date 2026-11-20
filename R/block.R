@@ -227,7 +227,9 @@ sim_param_expr <- function(expr) {
     sim_abort("`expr` must be a non-empty string.")
   }
   e <- parse_safe(expr, "Parameter expression")
-  vars <- setdiff(all.vars(e), c("pi", "TRUE", "FALSE"))
+  # `pi` stays a dependency: a parameter named pi takes precedence over the
+  # constant, as in a direct reference and in expression blocks
+  vars <- setdiff(all.vars(e), c("TRUE", "FALSE"))
   structure(list(name = NULL, expr = expr, vars = vars), class = "sim_param")
 }
 
@@ -285,8 +287,14 @@ resolve_value <- function(value, scopes, level, block_name) {
   }
   if (!is_param_ref(value)) return(value)
   if (!is.null(value$expr)) {
-    vals <- lapply(value$vars, function(n) resolve_value(sim_param(n), scopes, level, block_name))
-    names(vals) <- value$vars
+    vars <- value$vars
+    # the constant pi, unless a scope defines a parameter of that name
+    if ("pi" %in% vars && !any(vapply(scopes[seq.int(level, length.out = max(0L, length(scopes) - level + 1L))],
+                                      function(s) "pi" %in% names(s), TRUE))) {
+      vars <- setdiff(vars, "pi")
+    }
+    vals <- lapply(vars, function(n) resolve_value(sim_param(n), scopes, level, block_name))
+    names(vals) <- vars
     return(tryCatch(eval_safe(parse_safe(value$expr, "Parameter expression"), vals),
                     error = function(e) {
                       sim_abort("Block '", block_name, "': parameter expression '",
@@ -345,9 +353,9 @@ normalize_definition <- function(def, block_name, type) {
     if (is.null(v)) return(integer())
     known <- if (na_ok) v[!is.na(v)] else v
     if (!(is.numeric(v) || is.logical(v) && all(is.na(v))) || any(!is.finite(known)) ||
-        any(known != round(known)) || any(known < min)) {
-      sim_abort(where, ": `", what, "` must be whole numbers of at least ", min,
-                if (na_ok) " (or NA)", ", not ", deparse_short(unname(v)), ".")
+        any(known != round(known)) || any(known < min) || any(known > .Machine$integer.max)) {
+      sim_abort(where, ": `", what, "` must be whole numbers from ", min, " to ",
+                .Machine$integer.max, if (na_ok) " (or NA)", ", not ", deparse_short(unname(v)), ".")
     }
     as.integer(v)
   }
