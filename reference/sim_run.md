@@ -46,8 +46,11 @@ sim_run(
   Integration method passed to
   [`deSolve::ode()`](https://rdrr.io/pkg/deSolve/man/ode.html). Models
   with zero crossings need one of `"lsoda"`, `"lsode"`, `"lsodes"` or
-  `"lsodar"`. The fixed-step methods `"euler"` and `"rk4"` take steps of
-  at most `hmax`, by default `(tf - t0) / 1000`, shortened to end at
+  `"lsodar"`. `"radau"` and `"iteration"` are refused because they
+  cannot stop at segment boundaries, and `"ode23"` because its
+  implementation in deSolve can take one uncontrolled step across a
+  whole segment. The fixed-step methods `"euler"` and `"rk4"` take steps
+  of at most `hmax`, by default `(tf - t0) / 1000`, shortened to end at
   every boundary and output time.
 
 - rtol, atol:
@@ -90,7 +93,13 @@ sim_run(
   watched until it leaves the band, and the event fires then in the
   direction of the side it leaves on. A function that enters the band
   without reaching zero (an asymptotic approach) is reported once, at
-  the next segment boundary.
+  the next segment boundary: with the default band, an event watching
+  `exp(-t)` falling fires at the first boundary after `t = -log(1e-9)`,
+  about 20.7, which moves when sample clocks add boundaries. The same
+  band decides when a switch control, or the input of `compare`, `sign`,
+  `floor`, `ceiling` or `round`, is on its threshold (widened only by
+  the rounding of large values). Use `zc_tol = 0` to count exact sign
+  changes only.
 
 - on_failure:
 
@@ -99,8 +108,12 @@ sim_run(
 
 - ...:
 
-  Further arguments for
-  [`deSolve::ode()`](https://rdrr.io/pkg/deSolve/man/ode.html).
+  Further named arguments for
+  [`deSolve::ode()`](https://rdrr.io/pkg/deSolve/man/ode.html), such as
+  `jactype` and `jacfunc`. A `jacfunc` receives the absolute time, as
+  the model does. Arguments that set the times, events or root functions
+  (`times`, `events`, `rootfunc`, `tcrit`, `forcings` and the compiled
+  code interface) are refused, because simcompR sets them itself.
 
 ## Value
 
