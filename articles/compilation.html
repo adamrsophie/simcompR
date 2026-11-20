@@ -248,6 +248,12 @@ changes structure triggers a fresh analysis:</p>
 <span><span class="co">#&gt;      0      1</span></span></code></pre></div>
 <p>With <span class="math inline">D \neq 0</span> the state-space block
 gains direct feedthrough and the feedback becomes an algebraic loop.</p>
+<p><code><a href="../reference/sim_set_params.html">sim_param_values()</a></code> shows the model parameters a plan was
+built with, after <code><a href="../reference/sim_set_params.html">sim_set_params()</a></code>:</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/sim_set_params.html">sim_param_values</a></span><span class="op">(</span><span class="va">p1</span><span class="op">)</span></span>
+<span><span class="co">#&gt; $D</span></span>
+<span><span class="co">#&gt; [1] 0.5</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="diagnostics">Diagnostics<a class="anchor" aria-label="anchor" href="#diagnostics"></a>

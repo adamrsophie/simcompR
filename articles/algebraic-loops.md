@@ -44,7 +44,10 @@ evaluation. The unknowns are the outputs z of the blocks in the loop,
 and the residual is F(z) - z, where F evaluates the loop blocks once
 from the guessed outputs. Newton’s method with a finite-difference
 Jacobian and a backtracking line search drives the residual below
-`loop_tol`.
+`loop_tol` within `loop_maxit` iterations (both arguments of
+[`sim_compile()`](https://adamrsophie.github.io/simcompR/reference/sim_compile.md)).
+Trial points of the line search may produce non-finite values, which
+only shorten the step; the accepted solution must be finite.
 
 ``` r
 
@@ -153,6 +156,28 @@ max(abs(sim_signal(r, "x") - exp(-sim_times(r) / 2)))
 Every derivative evaluation solves the loop, which costs extra function
 evaluations. When possible, solve the loop by hand (here, replace the
 loop by a gain of 1/2) or break it with a physically meaningful state.
+
+## Loops cut by held outputs
+
+A loop through a sampled block that has direct feedthrough at its hits
+(such as `zero_order_hold`) is algebraic only at the hits. Between hits
+the block’s output is held, so it is known and the rest of the loop is
+evaluated in order, without Newton iteration and with zero iterations in
+the diagnostics. Its values must still be finite: here the expression
+divides by t - 0.5, and the run fails at t = 0.5 instead of recording an
+infinite signal:
+
+``` r
+
+held <- sim_model("held_loop")
+sim_add_block(held, "zero_order_hold", "h", period = 1)
+sim_add_block(held, "expression", "f", expr = "1 / (t - 0.5) + u / 2")
+sim_connect(held, "h", "f")
+sim_connect(held, "f", "h")
+sim_run(sim_compile(held, algebraic_loops = "solve"), c(0, 1), times = c(0, 0.5, 1))
+#> Error:
+#> ! Simulation failed at t = 0.5: Block 'f' returned Inf on port 1; signals must be finite.
+```
 
 ## Feedthrough that depends on parameters
 

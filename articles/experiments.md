@@ -84,6 +84,17 @@ cbind(zeta = c(0.1, 0.3, 0.7, 1), s$summary[c("peak", "settle")],
 The overshoot matches the classical formula 1 +
 e^{-\pi\zeta/\sqrt{1-\zeta^2}}.
 
+`s$parameters` records the value each parameter actually had in each
+run, including model values a run did not override. Scalars that share a
+type and class form an ordinary column (a `Date` stays a `Date`); vector
+values, like the denominators here, form a list column:
+
+``` r
+
+s$parameters$den[[2]]
+#> [1] 1.0 1.2 4.0
+```
+
 ``` r
 
 cols <- seq_along(s$results)
@@ -92,7 +103,7 @@ matplot(sim_times(s$results[[1]]), sapply(s$results, sim_signal, "G"),
 legend("topright", paste("zeta =", c(0.1, 0.3, 0.7, 1)), col = cols, lty = 1)
 ```
 
-![](experiments_files/figure-html/unnamed-chunk-6-1.png)
+![](experiments_files/figure-html/unnamed-chunk-7-1.png)
 
 ### Reuse of the compiled structure
 
@@ -106,9 +117,12 @@ trigger a fresh analysis automatically.
 ## Monte Carlo
 
 [`sim_monte_carlo()`](https://adamrsophie.github.io/simcompR/reference/sim_sweep.md)
-draws parameter sets under a fixed seed. The caller’s random stream is
-saved and restored, so the experiment is reproducible and does not
-disturb other random code:
+draws parameter sets under a fixed seed. The caller’s random stream
+(`.Random.seed` and [`RNGkind()`](https://rdrr.io/r/base/Random.html))
+is saved and restored, so the experiment is reproducible and does not
+disturb other random code, including when the sampler fails. With
+`keep = FALSE` only the summaries are kept, which saves memory for many
+runs:
 
 ``` r
 
@@ -128,9 +142,18 @@ summary(mc$summary$peak)
 hist(mc$summary$peak, main = "Peak response", xlab = "peak")
 ```
 
-![](experiments_files/figure-html/unnamed-chunk-7-1.png)
+![](experiments_files/figure-html/unnamed-chunk-8-1.png)
 
 Running it again with the same seed returns identical numbers.
+
+One restriction: with `RNGkind(normal.kind = "Box-Muller")`, R keeps the
+second deviate of each Box-Muller pair outside `.Random.seed`, and that
+cached value cannot be restored from R.
+[`sim_monte_carlo()`](https://adamrsophie.github.io/simcompR/reference/sim_sweep.md)
+warns in that case, and the caller’s next
+[`rnorm()`](https://rdrr.io/r/stats/Normal.html) may differ from what it
+would have been. With the default `"Inversion"` (and the other normal
+kinds) the stream is restored exactly.
 
 ## Noise inputs
 
@@ -153,17 +176,29 @@ identical(r1$signals, r2$signals)
 plot(r1, c("w", "filter"))
 ```
 
-![](experiments_files/figure-html/unnamed-chunk-8-1.png)
+![](experiments_files/figure-html/unnamed-chunk-9-1.png)
 
 ## Failures inside experiments
 
 Runs that fail are kept with status `"failed"` and missing summaries;
-they are never silently dropped. Use `s$status` and `s$messages` to
-inspect them.
+they are never silently dropped. Each run uses `on_failure = "warn"`
+unless another value is passed through `...`. Use `s$status` and
+`s$messages` to inspect them:
+
+``` r
+
+bad <- suppressWarnings(sim_sweep(plan, list(list(den = c(1, 1, 4)), list(den = c(1, 1, NA))),
+                                  tspan = c(0, 1), times = c(0, 1)))
+bad$status
+#> [1] "success" "failed"
+bad$messages[2]
+#> [1] "Block 'G' (transfer_function): `den` must be a non-empty finite numeric vector."
+```
 
 ## Parallel runs
 
 `cores > 1` runs simulations with
 [`parallel::mclapply()`](https://rdrr.io/r/parallel/mclapply.html) on
-Unix-like systems. Results do not depend on the number of cores, because
-every run is deterministic and seeds are drawn before the runs start.
+Unix-like systems; on Windows the runs are sequential. Results do not
+depend on the number of cores, because every run is deterministic and
+seeds are drawn before the runs start.

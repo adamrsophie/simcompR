@@ -166,12 +166,20 @@ reduces each result to named numbers.</p>
 <span><span class="co">#&gt; 3  0.7 1.045988   2.98   1.045988</span></span>
 <span><span class="co">#&gt; 4  1.0 1.000000   2.91   1.000000</span></span></code></pre></div>
 <p>The overshoot matches the classical formula <span class="math inline">1 + e^{-\pi\zeta/\sqrt{1-\zeta^2}}</span>.</p>
+<p><code>s$parameters</code> records the value each parameter actually
+had in each run, including model values a run did not override. Scalars
+that share a type and class form an ordinary column (a <code>Date</code>
+stays a <code>Date</code>); vector values, like the denominators here,
+form a list column:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">s</span><span class="op">$</span><span class="va">parameters</span><span class="op">$</span><span class="va">den</span><span class="op">[[</span><span class="fl">2</span><span class="op">]</span><span class="op">]</span></span>
+<span><span class="co">#&gt; [1] 1.0 1.2 4.0</span></span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cols</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_along</a></span><span class="op">(</span><span class="va">s</span><span class="op">$</span><span class="va">results</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/matplot.html" class="external-link">matplot</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_signal.html">sim_times</a></span><span class="op">(</span><span class="va">s</span><span class="op">$</span><span class="va">results</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">sapply</a></span><span class="op">(</span><span class="va">s</span><span class="op">$</span><span class="va">results</span>, <span class="va">sim_signal</span>, <span class="st">"G"</span><span class="op">)</span>,</span>
 <span>        type <span class="op">=</span> <span class="st">"l"</span>, lty <span class="op">=</span> <span class="fl">1</span>, col <span class="op">=</span> <span class="va">cols</span>, xlab <span class="op">=</span> <span class="st">"time"</span>, ylab <span class="op">=</span> <span class="st">"G"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/legend.html" class="external-link">legend</a></span><span class="op">(</span><span class="st">"topright"</span>, <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="st">"zeta ="</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.1</span>, <span class="fl">0.3</span>, <span class="fl">0.7</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span>, col <span class="op">=</span> <span class="va">cols</span>, lty <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></code></pre></div>
-<p><img src="experiments_files/figure-html/unnamed-chunk-6-1.png" class="r-plt" alt="" width="672"></p>
+<p><img src="experiments_files/figure-html/unnamed-chunk-7-1.png" class="r-plt" alt="" width="672"></p>
 <div class="section level3">
 <h3 id="reuse-of-the-compiled-structure">Reuse of the compiled structure<a class="anchor" aria-label="anchor" href="#reuse-of-the-compiled-structure"></a>
 </h3>
@@ -186,9 +194,12 @@ analysis automatically.</p>
 <h2 id="monte-carlo">Monte Carlo<a class="anchor" aria-label="anchor" href="#monte-carlo"></a>
 </h2>
 <p><code><a href="../reference/sim_sweep.html">sim_monte_carlo()</a></code> draws parameter sets under a fixed
-seed. The caller’s random stream is saved and restored, so the
-experiment is reproducible and does not disturb other random code:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+seed. The caller’s random stream (<code>.Random.seed</code> and
+<code><a href="https://rdrr.io/r/base/Random.html" class="external-link">RNGkind()</a></code>) is saved and restored, so the experiment is
+reproducible and does not disturb other random code, including when the
+sampler fails. With <code>keep = FALSE</code> only the summaries are
+kept, which saves memory for many runs:</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">2024</span><span class="op">)</span></span>
 <span><span class="va">before</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/Uniform.html" class="external-link">runif</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">2024</span><span class="op">)</span></span>
@@ -203,8 +214,16 @@ experiment is reproducible and does not disturb other random code:</p>
 <span><span class="co">#&gt;    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. </span></span>
 <span><span class="co">#&gt;   1.002   1.043   1.126   1.198   1.277   1.704</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/hist.html" class="external-link">hist</a></span><span class="op">(</span><span class="va">mc</span><span class="op">$</span><span class="va">summary</span><span class="op">$</span><span class="va">peak</span>, main <span class="op">=</span> <span class="st">"Peak response"</span>, xlab <span class="op">=</span> <span class="st">"peak"</span><span class="op">)</span></span></code></pre></div>
-<p><img src="experiments_files/figure-html/unnamed-chunk-7-1.png" class="r-plt" alt="" width="672"></p>
+<p><img src="experiments_files/figure-html/unnamed-chunk-8-1.png" class="r-plt" alt="" width="672"></p>
 <p>Running it again with the same seed returns identical numbers.</p>
+<p>One restriction: with
+<code>RNGkind(normal.kind = "Box-Muller")</code>, R keeps the second
+deviate of each Box-Muller pair outside <code>.Random.seed</code>, and
+that cached value cannot be restored from R.
+<code><a href="../reference/sim_sweep.html">sim_monte_carlo()</a></code> warns in that case, and the caller’s next
+<code><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm()</a></code> may differ from what it would have been. With the
+default <code>"Inversion"</code> (and the other normal kinds) the stream
+is restored exactly.</p>
 </div>
 <div class="section level2">
 <h2 id="noise-inputs">Noise inputs<a class="anchor" aria-label="anchor" href="#noise-inputs"></a>
@@ -214,7 +233,7 @@ their own seed, the hit index and the element index, with a
 counter-based generator that never touches R’s random number generator.
 Results are reproducible, do not depend on the global random state and
 leave it untouched:</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">nm</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"noisy"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">nm</span>, <span class="st">"white_noise"</span>, <span class="st">"w"</span>, sd <span class="op">=</span> <span class="fl">0.2</span>, period <span class="op">=</span> <span class="fl">0.05</span>, seed <span class="op">=</span> <span class="fl">3</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">nm</span>, <span class="st">"transfer_function"</span>, <span class="st">"filter"</span>, num <span class="op">=</span> <span class="fl">1</span>, den <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.5</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
@@ -224,22 +243,32 @@ leave it untouched:</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical</a></span><span class="op">(</span><span class="va">r1</span><span class="op">$</span><span class="va">signals</span>, <span class="va">r2</span><span class="op">$</span><span class="va">signals</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] TRUE</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">r1</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"w"</span>, <span class="st">"filter"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<p><img src="experiments_files/figure-html/unnamed-chunk-8-1.png" class="r-plt" alt="" width="672"></p>
+<p><img src="experiments_files/figure-html/unnamed-chunk-9-1.png" class="r-plt" alt="" width="672"></p>
 </div>
 <div class="section level2">
 <h2 id="failures-inside-experiments">Failures inside experiments<a class="anchor" aria-label="anchor" href="#failures-inside-experiments"></a>
 </h2>
 <p>Runs that fail are kept with status <code>"failed"</code> and missing
-summaries; they are never silently dropped. Use <code>s$status</code>
-and <code>s$messages</code> to inspect them.</p>
+summaries; they are never silently dropped. Each run uses
+<code>on_failure = "warn"</code> unless another value is passed through
+<code>...</code>. Use <code>s$status</code> and <code>s$messages</code>
+to inspect them:</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">bad</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/warning.html" class="external-link">suppressWarnings</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_sweep.html">sim_sweep</a></span><span class="op">(</span><span class="va">plan</span>, <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>den <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">1</span>, <span class="fl">4</span><span class="op">)</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>den <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">1</span>, <span class="cn">NA</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>                                  tspan <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>, times <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">bad</span><span class="op">$</span><span class="va">status</span></span>
+<span><span class="co">#&gt; [1] "success" "failed"</span></span>
+<span><span class="va">bad</span><span class="op">$</span><span class="va">messages</span><span class="op">[</span><span class="fl">2</span><span class="op">]</span></span>
+<span><span class="co">#&gt; [1] "Block 'G' (transfer_function): `den` must be a non-empty finite numeric vector."</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="parallel-runs">Parallel runs<a class="anchor" aria-label="anchor" href="#parallel-runs"></a>
 </h2>
 <p><code>cores &gt; 1</code> runs simulations with
-<code><a href="https://rdrr.io/r/parallel/mclapply.html" class="external-link">parallel::mclapply()</a></code> on Unix-like systems. Results do not
-depend on the number of cores, because every run is deterministic and
-seeds are drawn before the runs start.</p>
+<code><a href="https://rdrr.io/r/parallel/mclapply.html" class="external-link">parallel::mclapply()</a></code> on Unix-like systems; on Windows the
+runs are sequential. Results do not depend on the number of cores,
+because every run is deterministic and seeds are drawn before the runs
+start.</p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

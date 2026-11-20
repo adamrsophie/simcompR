@@ -230,6 +230,20 @@ c(status = r$status, end = max(r$time), exact = log(2))
 #>        "terminated" "0.693147624240805" "0.693147180559945"
 ```
 
+Each stop that triggers is a handler and counts toward `max_events`,
+like an event.
+
+Events can be removed again with
+[`sim_remove_event()`](https://adamrsophie.github.io/simcompR/reference/sim_add_event.md),
+which leaves the blocks untouched:
+
+``` r
+
+sim_remove_event(st, "half")
+sim_run(sim_compile(st), c(0, 10))$status
+#> [1] "success"
+```
+
 ## Simultaneous events
 
 Several things can happen at one instant. They run in a fixed order:
@@ -313,3 +327,53 @@ sim_events(sim_run(sim_compile(saw), c(0, 2.5)))
 #> 2    1  wrap zero_crossing      x   falling
 #> 3    2  wrap zero_crossing      x   falling
 ```
+
+## The zero band
+
+`zc_tol` (default `1e-9`) is the width of the band around each level
+inside which a function counts as being on it. It makes crossings robust
+to round-off, but it also means that arriving in the band counts as
+arriving at the level, even without a sign change. Asymptotic approaches
+show the effect: e^{-t} never reaches zero, yet a falling event on it
+fires once e^{-t} \< 10^{-9}, at the next segment boundary. Without
+other boundaries that is the end of the interval; with a 1 s sample
+clock that has nothing to do with the event it is t = 21:
+
+``` r
+
+dec <- sim_model("decay")
+sim_add_block(dec, "integrator", "x", initial = 1)
+sim_add_block(dec, "gain", "k", gain = -1)
+sim_connect(dec, "x", "k")
+sim_connect(dec, "k", "x")
+sim_add_event(dec, "empty", sim_zero_crossing("x", "falling"), terminal = TRUE)
+p <- sim_compile(dec)
+r <- sim_run(p, c(0, 60))
+c(status = r$status, end = max(r$time))
+#>       status          end 
+#> "terminated"         "60"
+
+sim_add_block(dec, "zero_order_hold", "clock", period = 1)
+sim_connect(dec, "x", "clock")
+r <- sim_run(sim_compile(dec), c(0, 60))
+c(status = r$status, end = max(r$time))
+#>       status          end 
+#> "terminated"         "21"
+```
+
+With `zc_tol = 0` only true sign changes count, and the decay never
+fires:
+
+``` r
+
+sim_run(p, c(0, 60), zc_tol = 0)$status
+#> [1] "success"
+```
+
+The same band decides when the control of a `switch`, or the input of
+`compare`, `sign`, `floor`, `ceiling` or `round`, sits on its threshold.
+It is absolute; for signals far from zero it is widened only by the
+rounding of their values (a few units in the last place), so a
+comparison of `1e12 + t` with `1e12 + 0.5` switches at the same time as
+one of `t` with `0.5`. Choose `zc_tol` below the smallest meaningful
+distance from a level in your model, or zero.

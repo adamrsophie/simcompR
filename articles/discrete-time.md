@@ -111,6 +111,22 @@ all.equal(unname(sim_signal(r, "x")), ref)
 #> [1] TRUE
 ```
 
+[`sim_signal()`](https://adamrsophie.github.io/simcompR/reference/sim_signal.md)
+gives block outputs; the discrete states behind them (here the state of
+the recurrence, which leads the output by one hit) are recorded too and
+returned by
+[`sim_discrete_states()`](https://adamrsophie.github.io/simcompR/reference/sim_signal.md),
+one column per state:
+
+``` r
+
+head(sim_discrete_states(r), 3)
+#>         x
+#> [1,] 3.00
+#> [2,] 2.50
+#> [3,] 2.25
+```
+
 The same system as a transfer function in z, \frac{1}{z - 0.5}:
 
 ``` r
@@ -159,7 +175,7 @@ max(abs(sim_signal(r, "x") - xk))
 plot(sim_run(sim_compile(ctl), c(0, 4)), c("x", "u"))
 ```
 
-![](discrete-time_files/figure-html/unnamed-chunk-8-1.png)
+![](discrete-time_files/figure-html/unnamed-chunk-9-1.png)
 
 Between hits the plant evolves continuously while `u` is held: the
 continuous state is integrated over each sample interval with the held

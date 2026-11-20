@@ -275,6 +275,10 @@ signal of interest: its input is available under the scope’s name and
 <span><span class="va">r</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">m</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">6</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">r</span><span class="op">)</span></span></code></pre></div>
 <p><img src="ports-and-signals_files/figure-html/unnamed-chunk-10-1.png" class="r-plt" alt="" width="672"></p>
+<p>A <code>terminator</code> accepts a signal and does nothing with it.
+Use it to mark an output as deliberately unused, so that a reader of the
+diagram (or of <code><a href="../reference/sim_to_dot.html">sim_to_dot()</a></code>) sees that it was not
+forgotten.</p>
 </div>
 <div class="section level2">
 <h2 id="units">Units<a class="anchor" aria-label="anchor" href="#units"></a>

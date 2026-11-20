@@ -198,6 +198,11 @@ plot(r)
 
 ![](ports-and-signals_files/figure-html/unnamed-chunk-10-1.png)
 
+A `terminator` accepts a signal and does nothing with it. Use it to mark
+an output as deliberately unused, so that a reader of the diagram (or of
+[`sim_to_dot()`](https://adamrsophie.github.io/simcompR/reference/sim_to_dot.md))
+sees that it was not forgotten.
+
 ## Units
 
 Signals carry no units in this release. Keep units consistent within a

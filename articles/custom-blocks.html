@@ -187,30 +187,62 @@ hit</td>
 <td>zero-crossing functions and handlers</td>
 </tr>
 <tr class="odd">
+<td><code>on_rest</code></td>
+<td>handler for a crossing function that stays on its level</td>
+</tr>
+<tr class="even">
 <td><code>modes</code></td>
 <td>
 <code>function(t, x, d, u)</code> giving the mode (stored in
 <code>d</code>) for the current inputs</td>
 </tr>
-<tr class="even">
+<tr class="odd">
 <td><code>stop_if</code></td>
 <td>
 <code>function(t, x, d, u)</code> returning <code>TRUE</code> to end
 the run</td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td>
 <code>kinks</code>, <code>kink_size</code>
 </td>
 <td>crossing functions at kinks of a memoryless output, and their
 number</td>
 </tr>
+<tr class="odd">
+<td><code>jump</code></td>
+<td>exact one-sided values of an output that jumps at its kinks</td>
+</tr>
 <tr class="even">
 <td><code>breakpoints</code></td>
 <td>times where the block’s output is discontinuous</td>
 </tr>
+<tr class="odd">
+<td><code>check_sizes</code></td>
+<td>
+<code>function(in_sizes, out_sizes)</code> that signals an error for
+inconsistent sizes</td>
+</tr>
+<tr class="even">
+<td>
+<code>input_names</code>, <code>output_names</code>
+</td>
+<td>port names, when <code>inputs</code> and <code>outputs</code> are
+unnamed</td>
+</tr>
+<tr class="odd">
+<td><code>nonfinite_ok</code></td>
+<td>indices of discrete states allowed to hold <code>-Inf</code>
+</td>
+</tr>
 </tbody>
 </table>
+<p>Sizes must be whole numbers from 1 to
+<code>.Machine$integer.max</code>; <code>size_out</code> results are
+checked before they are used. <code><a href="../reference/sim_register_block_type.html">sim_register_block_type()</a></code>
+also takes <code>params</code> (the defaults) and <code>required</code>
+(parameters the user must give; by default those whose default is
+<code>NULL</code>).</p>
 <p><code>u</code> is a list with one numeric vector per input port.
 <code>output</code> must be free of side effects: it is called at trial
 points of the solver.</p>
@@ -322,10 +354,37 @@ soft limiter is linear up to 1 in magnitude and flat beyond:</p>
 <span><span class="fu"><a href="../reference/sim_signal.html">sim_signal</a></span><span class="op">(</span><span class="va">r</span>, <span class="st">"x"</span><span class="op">)</span>   <span class="co"># zero over a full period</span></span>
 <span><span class="co">#&gt;            x </span></span>
 <span><span class="co">#&gt; 2.454109e-09</span></span></code></pre></div>
+<p>When the output itself jumps at a kink, as for a step-shaped
+function, declare <code>jump</code> as well: it tells the simulator the
+exact output on each side of the kink, so the jump happens at the
+located instant. A unit step of the input at 2 (which
+<code>compare</code> already provides):</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/sim_register_block_type.html">sim_register_block_type</a></span><span class="op">(</span></span>
+<span>  <span class="st">"above_two"</span>, overwrite <span class="op">=</span> <span class="cn">TRUE</span>, category <span class="op">=</span> <span class="st">"user"</span>,</span>
+<span>  description <span class="op">=</span> <span class="st">"1 when the input is above 2"</span>,</span>
+<span>  build <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">p</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    inputs <span class="op">=</span> <span class="cn">NA</span>, outputs <span class="op">=</span> <span class="cn">NA</span>, feedthrough <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span>    size_out <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">n</span><span class="op">)</span> <span class="va">n</span>,</span>
+<span>    output <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">t</span>, <span class="va">x</span>, <span class="va">d</span>, <span class="va">u</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="va">u</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span> <span class="op">&gt;</span> <span class="fl">2</span><span class="op">)</span>,</span>
+<span>    kinks <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">t</span>, <span class="va">x</span>, <span class="va">d</span>, <span class="va">u</span><span class="op">)</span> <span class="va">u</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span> <span class="op">-</span> <span class="fl">2</span>,</span>
+<span>    kink_size <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">n</span><span class="op">)</span> <span class="va">n</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span>,</span>
+<span>    jump <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>at <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">v</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fl">2</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">v</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>                value <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">k</span>, <span class="va">s</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="va">s</span> <span class="op">&gt;</span> <span class="fl">0</span><span class="op">)</span>,</span>
+<span>                slope <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">k</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">k</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">ab</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"above"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">ab</span>, <span class="st">"time"</span>, <span class="st">"t"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">ab</span>, <span class="st">"above_two"</span>, <span class="st">"a"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">ab</span>, <span class="st">"stop"</span>, <span class="st">"halt"</span>, threshold <span class="op">=</span> <span class="fl">0.5</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">ab</span>, <span class="st">"t"</span>, <span class="st">"a"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">ab</span>, <span class="st">"a"</span>, <span class="st">"halt"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_signal.html">sim_times</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">ab</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">5</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>   <span class="co"># stops at exactly 2</span></span>
+<span><span class="co">#&gt; [1] 2</span></span></code></pre></div>
 <p>A block whose output switches between branches keeps the branch in a
 discrete state, returns it from <code>modes</code> (called at boundaries
 until all modes settle) and moves it at located crossings with
-<code>zc</code> and <code>on_zc</code>; see the built-in
+<code>zc</code> and <code>on_zc</code>; <code>on_rest</code> decides the
+branch when the control stays on its threshold. See the built-in
 <code>switch</code> and <code>relay</code> blocks. <code>stop_if</code>
 ends the run, as the <code>stop</code> block does.</p>
 </div>
@@ -342,47 +401,48 @@ the same name, in any session that reads the file.</p>
 <div class="section level2">
 <h2 id="listing-types">Listing types<a class="anchor" aria-label="anchor" href="#listing-types"></a>
 </h2>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/head.html" class="external-link">head</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_block_types.html">sim_block_types</a></span><span class="op">(</span><span class="op">)</span>, <span class="fl">10</span><span class="op">)</span></span>
 <span><span class="co">#&gt;                          type category</span></span>
-<span><span class="co">#&gt; 1                         abs     math</span></span>
-<span><span class="co">#&gt; 2                     compare    logic</span></span>
-<span><span class="co">#&gt; 3                    constant   source</span></span>
-<span><span class="co">#&gt; 4                   dead_zone     math</span></span>
-<span><span class="co">#&gt; 5                deadband_abs     user</span></span>
-<span><span class="co">#&gt; 6                       demux  routing</span></span>
-<span><span class="co">#&gt; 7         discrete_integrator discrete</span></span>
-<span><span class="co">#&gt; 8        discrete_state_space discrete</span></span>
-<span><span class="co">#&gt; 9  discrete_transfer_function discrete</span></span>
-<span><span class="co">#&gt; 10                     divide     math</span></span>
+<span><span class="co">#&gt; 1                   above_two     user</span></span>
+<span><span class="co">#&gt; 2                         abs     math</span></span>
+<span><span class="co">#&gt; 3                     compare    logic</span></span>
+<span><span class="co">#&gt; 4                    constant   source</span></span>
+<span><span class="co">#&gt; 5                   dead_zone     math</span></span>
+<span><span class="co">#&gt; 6                deadband_abs     user</span></span>
+<span><span class="co">#&gt; 7                       demux  routing</span></span>
+<span><span class="co">#&gt; 8         discrete_integrator discrete</span></span>
+<span><span class="co">#&gt; 9        discrete_state_space discrete</span></span>
+<span><span class="co">#&gt; 10 discrete_transfer_function discrete</span></span>
 <span><span class="co">#&gt;                                               description</span></span>
-<span><span class="co">#&gt; 1                                          Absolute value</span></span>
-<span><span class="co">#&gt; 2     1 when `u op threshold` holds, else 0 (elementwise)</span></span>
-<span><span class="co">#&gt; 3                                         Constant signal</span></span>
-<span><span class="co">#&gt; 4       Zero inside [lower, upper], shifted input outside</span></span>
-<span><span class="co">#&gt; 5                                     max(|u| - width, 0)</span></span>
-<span><span class="co">#&gt; 6               Split a vector into pieces of given sizes</span></span>
-<span><span class="co">#&gt; 7  Accumulator with forward, backward or trapezoidal rule</span></span>
-<span><span class="co">#&gt; 8        x[k+1] = A x[k] + B u[k], y[k] = C x[k] + D u[k]</span></span>
-<span><span class="co">#&gt; 9              SISO num(z)/den(z), descending powers of z</span></span>
-<span><span class="co">#&gt; 10                                              in1 / in2</span></span>
+<span><span class="co">#&gt; 1                             1 when the input is above 2</span></span>
+<span><span class="co">#&gt; 2                                          Absolute value</span></span>
+<span><span class="co">#&gt; 3     1 when `u op threshold` holds, else 0 (elementwise)</span></span>
+<span><span class="co">#&gt; 4                                         Constant signal</span></span>
+<span><span class="co">#&gt; 5       Zero inside [lower, upper], shifted input outside</span></span>
+<span><span class="co">#&gt; 6                                     max(|u| - width, 0)</span></span>
+<span><span class="co">#&gt; 7               Split a vector into pieces of given sizes</span></span>
+<span><span class="co">#&gt; 8  Accumulator with forward, backward or trapezoidal rule</span></span>
+<span><span class="co">#&gt; 9        x[k+1] = A x[k] + B u[k], y[k] = C x[k] + D u[k]</span></span>
+<span><span class="co">#&gt; 10             SISO num(z)/den(z), descending powers of z</span></span>
 <span><span class="co">#&gt;                               parameters</span></span>
 <span><span class="co">#&gt; 1                                       </span></span>
-<span><span class="co">#&gt; 2                          op, threshold</span></span>
-<span><span class="co">#&gt; 3                                  value</span></span>
-<span><span class="co">#&gt; 4                           lower, upper</span></span>
-<span><span class="co">#&gt; 5                                  width</span></span>
-<span><span class="co">#&gt; 6                                  sizes</span></span>
-<span><span class="co">#&gt; 7  gain, initial, period, offset, method</span></span>
-<span><span class="co">#&gt; 8    A, B, C, D, initial, period, offset</span></span>
-<span><span class="co">#&gt; 9      num, den, initial, period, offset</span></span>
-<span><span class="co">#&gt; 10</span></span>
+<span><span class="co">#&gt; 2                                       </span></span>
+<span><span class="co">#&gt; 3                          op, threshold</span></span>
+<span><span class="co">#&gt; 4                                  value</span></span>
+<span><span class="co">#&gt; 5                           lower, upper</span></span>
+<span><span class="co">#&gt; 6                                  width</span></span>
+<span><span class="co">#&gt; 7                                  sizes</span></span>
+<span><span class="co">#&gt; 8  gain, initial, period, offset, method</span></span>
+<span><span class="co">#&gt; 9    A, B, C, D, initial, period, offset</span></span>
+<span><span class="co">#&gt; 10     num, den, initial, period, offset</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_block_types.html">sim_block_types</a></span><span class="op">(</span><span class="op">)</span>, <span class="va">category</span> <span class="op">==</span> <span class="st">"user"</span><span class="op">)</span></span>
 <span><span class="co">#&gt;               type category                         description     parameters</span></span>
-<span><span class="co">#&gt; 5     deadband_abs     user                 max(|u| - width, 0)          width</span></span>
-<span><span class="co">#&gt; 17         limiter     user Clamp to [-1, 1] with located kinks               </span></span>
-<span><span class="co">#&gt; 20         lowpass     user                                       tau, initial</span></span>
-<span><span class="co">#&gt; 23 moving_average3     user                                     period, offset</span></span></code></pre></div>
+<span><span class="co">#&gt; 1        above_two     user         1 when the input is above 2               </span></span>
+<span><span class="co">#&gt; 6     deadband_abs     user                 max(|u| - width, 0)          width</span></span>
+<span><span class="co">#&gt; 18         limiter     user Clamp to [-1, 1] with located kinks               </span></span>
+<span><span class="co">#&gt; 21         lowpass     user                                       tau, initial</span></span>
+<span><span class="co">#&gt; 24 moving_average3     user                                     period, offset</span></span></code></pre></div>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

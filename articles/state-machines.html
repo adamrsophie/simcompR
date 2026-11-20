@@ -128,11 +128,44 @@ the inputs at that hit.</p>
 whitelist) or R functions. Guards see <code>u</code> (the input vector),
 <code>t</code>, <code>elapsed</code> and the data variables; actions
 assign data variables.</p>
+<p>Guards and actions must be pure: their result may depend only on
+their arguments. The block evaluates them once to compute its outputs at
+a hit and again to compute its next state, and the event engine may
+evaluate them at more points of one instant, so a function with side
+effects (printing, drawing random numbers, counting calls) would see
+more calls than hits.</p>
+<div class="section level3">
+<h3 id="elapsed-time">Elapsed time<a class="anchor" aria-label="anchor" href="#elapsed-time"></a>
+</h3>
+<p><code>after</code> compares the true time in the state,
+<code>t</code> minus the entry time, with the requested duration. The
+only allowance is for the rounding of the two times, at most <span class="math inline">2\varepsilon\max(|t|, |t_\text{entry}|)</span>, so a
+wait of one period far from the origin fires on time. A state can be
+entered between sample hits, through an initial override or an event
+reset; it then waits its full duration and fires at the first hit after
+it has elapsed. Here the machine enters <code>a</code> at <span class="math inline">t = 0.4</span> and its one second wait fires at
+<span class="math inline">t = 2</span>, not at the hit at <span class="math inline">t = 1</span>:</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">fsm</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"late_entry"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">fsm</span>, <span class="st">"constant"</span>, <span class="st">"c"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">fsm</span>, <span class="st">"state_machine"</span>, <span class="st">"sm"</span>, period <span class="op">=</span> <span class="fl">1</span>, states <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"b"</span><span class="op">)</span>,</span>
+<span>              transitions <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_transition.html">sim_transition</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"b"</span>, after <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">fsm</span>, <span class="st">"c"</span>, <span class="st">"sm"</span><span class="op">)</span></span>
+<span><span class="va">r</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">fsm</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.4</span>, <span class="fl">3</span><span class="op">)</span>, times <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0.4</span>, <span class="fl">1</span>, <span class="fl">2</span>, <span class="fl">3</span><span class="op">)</span>,</span>
+<span>             include_ticks <span class="op">=</span> <span class="cn">FALSE</span>, initial <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>sm <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0.4</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_signal.html">sim_signal</a></span><span class="op">(</span><span class="va">r</span>, <span class="st">"sm"</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] 1 1 2 2</span></span></code></pre></div>
+<p>The discrete states of the block are the active state index, the
+entry time and the data variables (see
+<code><a href="../reference/sim_signal.html">sim_discrete_states()</a></code>). Before the first hit the entry time
+is <code>-Inf</code>, meaning “not entered yet”; this is the one
+discrete state allowed to be non-finite.</p>
+</div>
 </div>
 <div class="section level2">
 <h2 id="a-timed-traffic-light">A timed traffic light<a class="anchor" aria-label="anchor" href="#a-timed-traffic-light"></a>
 </h2>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">m</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"traffic"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">m</span>, <span class="st">"constant"</span>, <span class="st">"enable"</span>, value <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">m</span>, <span class="st">"state_machine"</span>, <span class="st">"light"</span>, period <span class="op">=</span> <span class="fl">1</span>,</span>
@@ -168,7 +201,7 @@ and <code>data</code> (when there are data variables).</p>
 </h2>
 <p>A counter of how many times the machine re-entered state
 <code>a</code>:</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">m</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"counter"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">m</span>, <span class="st">"time"</span>, <span class="st">"t"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">m</span>, <span class="st">"state_machine"</span>, <span class="st">"sm"</span>, period <span class="op">=</span> <span class="fl">1</span>,</span>
@@ -198,7 +231,7 @@ tried.</p>
 </h2>
 <p>A heater controlled by a two-state machine with hysteresis. The room
 cools toward 10 degrees and the heater adds 2 degrees per unit time.</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">th</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"thermostat"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">th</span>, <span class="st">"integrator"</span>, <span class="st">"temp"</span>, initial <span class="op">=</span> <span class="fl">18</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">th</span>, <span class="st">"state_machine"</span>, <span class="st">"ctrl"</span>, period <span class="op">=</span> <span class="fl">0.1</span>,</span>
@@ -216,7 +249,7 @@ cools toward 10 degrees and the heater adds 2 degrees per unit time.</p>
 <span><span class="fu"><a href="../reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">th</span>, <span class="st">"rate"</span>, <span class="st">"temp"</span><span class="op">)</span></span>
 <span><span class="va">r</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">th</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">30</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">r</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"temp"</span>, <span class="st">"ctrl.y"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<p><img src="state-machines_files/figure-html/unnamed-chunk-5-1.png" class="r-plt" alt="" width="672"></p>
+<p><img src="state-machines_files/figure-html/unnamed-chunk-6-1.png" class="r-plt" alt="" width="672"></p>
 <p>The machine samples every 0.1 time units, so the temperature
 overshoots the thresholds slightly; this is the expected behavior of a
 sampled controller.</p>
@@ -228,7 +261,7 @@ sampled controller.</p>
 (ignoring guards) and states without outgoing transitions, and errors on
 unknown states or ambiguous priorities. The block runs the structural
 checks when it is built.</p>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/sim_check_state_machine.html">sim_check_state_machine</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"off"</span>, <span class="st">"on"</span>, <span class="st">"fault"</span><span class="op">)</span>,</span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_transition.html">sim_transition</a></span><span class="op">(</span><span class="st">"off"</span>, <span class="st">"on"</span>, <span class="st">"u[1] &gt; 0"</span><span class="op">)</span>,</span>
 <span>       <span class="fu"><a href="../reference/sim_transition.html">sim_transition</a></span><span class="op">(</span><span class="st">"on"</span>, <span class="st">"off"</span>, <span class="st">"u[1] &lt;= 0"</span><span class="op">)</span><span class="op">)</span>,</span>

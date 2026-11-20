@@ -188,6 +188,13 @@ zeros are points where a memoryless output or its slope jumps (the
 corners of a saturation), and their number for the given input sizes.
 The integrator restarts exactly at each kink; nothing is logged. They
 are ignored by methods without root finding.</p></li>
+<li><p><code>jump</code>: optional, for a block with one kink function per element of
+its single input whose output jumps there (like <code>compare</code> or <code>floor</code>):
+a list of <code>at(v)</code>, the kink nearest to each input value, <code>value(k, s)</code>,
+the output just past kink <code>k</code> on side <code>s</code> (<code>1</code> above, <code>-1</code> below), and
+<code>slope(k)</code>, the sign of the kink function's slope at <code>k</code>. The output
+then jumps at the located instant itself, with the exact one-sided
+value, so blocks and events downstream see the jump there.</p></li>
 <li><p><code>nonfinite_ok</code>: indices into <code>d</code> of discrete states that may hold
 <code>-Inf</code> (a "not yet" sentinel such as the entry time of a state machine
 before its first hit). All other values must stay finite.</p></li>

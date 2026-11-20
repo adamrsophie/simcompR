@@ -136,8 +136,11 @@ delay: that would change the mathematics silently.</p>
 every evaluation. The unknowns are the outputs <span class="math inline">z</span> of the blocks in the loop, and the residual
 is <span class="math inline">F(z) - z</span>, where <span class="math inline">F</span> evaluates the loop blocks once from the
 guessed outputs. Newton’s method with a finite-difference Jacobian and a
-backtracking line search drives the residual below
-<code>loop_tol</code>.</p>
+backtracking line search drives the residual below <code>loop_tol</code>
+within <code>loop_maxit</code> iterations (both arguments of
+<code><a href="../reference/sim_compile.html">sim_compile()</a></code>). Trial points of the line search may produce
+non-finite values, which only shorten the step; the accepted solution
+must be finite.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">plan</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">m</span>, algebraic_loops <span class="op">=</span> <span class="st">"solve"</span><span class="op">)</span></span>
 <span><span class="va">plan</span></span>
@@ -235,6 +238,27 @@ the history of the solver’s trial points.</p>
 function evaluations. When possible, solve the loop by hand (here,
 replace the loop by a gain of 1/2) or break it with a physically
 meaningful state.</p>
+</div>
+<div class="section level2">
+<h2 id="loops-cut-by-held-outputs">Loops cut by held outputs<a class="anchor" aria-label="anchor" href="#loops-cut-by-held-outputs"></a>
+</h2>
+<p>A loop through a sampled block that has direct feedthrough at its
+hits (such as <code>zero_order_hold</code>) is algebraic only at the
+hits. Between hits the block’s output is held, so it is known and the
+rest of the loop is evaluated in order, without Newton iteration and
+with zero iterations in the diagnostics. Its values must still be
+finite: here the expression divides by <span class="math inline">t -
+0.5</span>, and the run fails at <span class="math inline">t =
+0.5</span> instead of recording an infinite signal:</p>
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">held</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"held_loop"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">held</span>, <span class="st">"zero_order_hold"</span>, <span class="st">"h"</span>, period <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">held</span>, <span class="st">"expression"</span>, <span class="st">"f"</span>, expr <span class="op">=</span> <span class="st">"1 / (t - 0.5) + u / 2"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">held</span>, <span class="st">"h"</span>, <span class="st">"f"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">held</span>, <span class="st">"f"</span>, <span class="st">"h"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">held</span>, algebraic_loops <span class="op">=</span> <span class="st">"solve"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>, times <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">0.5</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00; font-weight: bold;">Error</span><span style="font-weight: bold;">:</span></span></span>
+<span><span class="co">#&gt; <span style="color: #BBBB00;">!</span> Simulation failed at t = 0.5: Block 'f' returned Inf on port 1; signals must be finite.</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="feedthrough-that-depends-on-parameters">Feedthrough that depends on parameters<a class="anchor" aria-label="anchor" href="#feedthrough-that-depends-on-parameters"></a>

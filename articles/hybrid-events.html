@@ -340,6 +340,14 @@ success.</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>status <span class="op">=</span> <span class="va">r</span><span class="op">$</span><span class="va">status</span>, end <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="va">r</span><span class="op">$</span><span class="va">time</span><span class="op">)</span>, exact <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">2</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;              status                 end               exact </span></span>
 <span><span class="co">#&gt;        "terminated" "0.693147624240805" "0.693147180559945"</span></span></code></pre></div>
+<p>Each stop that triggers is a handler and counts toward
+<code>max_events</code>, like an event.</p>
+<p>Events can be removed again with <code><a href="../reference/sim_add_event.html">sim_remove_event()</a></code>,
+which leaves the blocks untouched:</p>
+<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/sim_add_event.html">sim_remove_event</a></span><span class="op">(</span><span class="va">st</span>, <span class="st">"half"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">st</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">10</span><span class="op">)</span><span class="op">)</span><span class="op">$</span><span class="va">status</span></span>
+<span><span class="co">#&gt; [1] "success"</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="simultaneous-events">Simultaneous events<a class="anchor" aria-label="anchor" href="#simultaneous-events"></a>
@@ -372,7 +380,7 @@ stops the run only after the instant is settled. The result has one row
 before the first event and one after the last.</p>
 <p>Here a scheduled reset pushes <code>p</code> across zero, which fires
 a second event, whose reset fires a third, all at <span class="math inline">t = 0.3</span>:</p>
-<div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">cas</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"cascade"</span><span class="op">)</span></span>
 <span><span class="kw">for</span> <span class="op">(</span><span class="va">nm</span> <span class="kw">in</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"p"</span>, <span class="st">"q"</span>, <span class="st">"n"</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">cas</span>, <span class="st">"constant"</span>, <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="va">nm</span>, <span class="st">"_rate"</span><span class="op">)</span>, value <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span>
@@ -407,7 +415,7 @@ fires when it moves away in the trigger direction. The simulator finds
 the direction with a short probe integration, so this also works when
 the first derivative is zero there. Here the state starts on the level
 and falls at once:</p>
-<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">saw</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"saw"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">saw</span>, <span class="st">"constant"</span>, <span class="st">"down"</span>, value <span class="op">=</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">saw</span>, <span class="st">"integrator"</span>, <span class="st">"x"</span><span class="op">)</span></span>
@@ -418,6 +426,53 @@ and falls at once:</p>
 <span><span class="co">#&gt; 1    0  wrap zero_crossing      x   falling</span></span>
 <span><span class="co">#&gt; 2    1  wrap zero_crossing      x   falling</span></span>
 <span><span class="co">#&gt; 3    2  wrap zero_crossing      x   falling</span></span></code></pre></div>
+</div>
+<div class="section level2">
+<h2 id="the-zero-band">The zero band<a class="anchor" aria-label="anchor" href="#the-zero-band"></a>
+</h2>
+<p><code>zc_tol</code> (default <code>1e-9</code>) is the width of the
+band around each level inside which a function counts as being on it. It
+makes crossings robust to round-off, but it also means that arriving in
+the band counts as arriving at the level, even without a sign change.
+Asymptotic approaches show the effect: <span class="math inline">e^{-t}</span> never reaches zero, yet a falling
+event on it fires once <span class="math inline">e^{-t} &lt;
+10^{-9}</span>, at the next segment boundary. Without other boundaries
+that is the end of the interval; with a 1 s sample clock that has
+nothing to do with the event it is <span class="math inline">t =
+21</span>:</p>
+<div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">dec</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_model.html">sim_model</a></span><span class="op">(</span><span class="st">"decay"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">dec</span>, <span class="st">"integrator"</span>, <span class="st">"x"</span>, initial <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">dec</span>, <span class="st">"gain"</span>, <span class="st">"k"</span>, gain <span class="op">=</span> <span class="op">-</span><span class="fl">1</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">dec</span>, <span class="st">"x"</span>, <span class="st">"k"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">dec</span>, <span class="st">"k"</span>, <span class="st">"x"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_add_event.html">sim_add_event</a></span><span class="op">(</span><span class="va">dec</span>, <span class="st">"empty"</span>, <span class="fu"><a href="../reference/sim_add_event.html">sim_zero_crossing</a></span><span class="op">(</span><span class="st">"x"</span>, <span class="st">"falling"</span><span class="op">)</span>, terminal <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="va">p</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">dec</span><span class="op">)</span></span>
+<span><span class="va">r</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="va">p</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">60</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>status <span class="op">=</span> <span class="va">r</span><span class="op">$</span><span class="va">status</span>, end <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="va">r</span><span class="op">$</span><span class="va">time</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt;       status          end </span></span>
+<span><span class="co">#&gt; "terminated"         "60"</span></span>
+<span></span>
+<span><span class="fu"><a href="../reference/sim_add_block.html">sim_add_block</a></span><span class="op">(</span><span class="va">dec</span>, <span class="st">"zero_order_hold"</span>, <span class="st">"clock"</span>, period <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/sim_connect.html">sim_connect</a></span><span class="op">(</span><span class="va">dec</span>, <span class="st">"x"</span>, <span class="st">"clock"</span><span class="op">)</span></span>
+<span><span class="va">r</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="fu"><a href="../reference/sim_compile.html">sim_compile</a></span><span class="op">(</span><span class="va">dec</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">60</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>status <span class="op">=</span> <span class="va">r</span><span class="op">$</span><span class="va">status</span>, end <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="va">r</span><span class="op">$</span><span class="va">time</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt;       status          end </span></span>
+<span><span class="co">#&gt; "terminated"         "21"</span></span></code></pre></div>
+<p>With <code>zc_tol = 0</code> only true sign changes count, and the
+decay never fires:</p>
+<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="../reference/sim_run.html">sim_run</a></span><span class="op">(</span><span class="va">p</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">60</span><span class="op">)</span>, zc_tol <span class="op">=</span> <span class="fl">0</span><span class="op">)</span><span class="op">$</span><span class="va">status</span></span>
+<span><span class="co">#&gt; [1] "success"</span></span></code></pre></div>
+<p>The same band decides when the control of a <code>switch</code>, or
+the input of <code>compare</code>, <code>sign</code>,
+<code>floor</code>, <code>ceiling</code> or <code>round</code>, sits on
+its threshold. It is absolute; for signals far from zero it is widened
+only by the rounding of their values (a few units in the last place), so
+a comparison of <code>1e12 + t</code> with <code>1e12 + 0.5</code>
+switches at the same time as one of <code>t</code> with
+<code>0.5</code>. Choose <code>zc_tol</code> below the smallest
+meaningful distance from a level in your model, or zero.</p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

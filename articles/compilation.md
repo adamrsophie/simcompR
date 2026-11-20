@@ -162,6 +162,17 @@ c(reused = p1$structure_reused, loops = length(p1$graph$loops))
 With D \neq 0 the state-space block gains direct feedthrough and the
 feedback becomes an algebraic loop.
 
+[`sim_param_values()`](https://adamrsophie.github.io/simcompR/reference/sim_set_params.md)
+shows the model parameters a plan was built with, after
+[`sim_set_params()`](https://adamrsophie.github.io/simcompR/reference/sim_set_params.md):
+
+``` r
+
+sim_param_values(p1)
+#> $D
+#> [1] 0.5
+```
+
 ## Diagnostics
 
 [`sim_diagnostics()`](https://adamrsophie.github.io/simcompR/reference/sim_diagnostics.md)

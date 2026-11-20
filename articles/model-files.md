@@ -40,6 +40,14 @@ a form that reads back to the same double: a short decimal such as
 (`"0x1.5555555555555p-2"` for 1/3) otherwise. Matrices keep their
 dimensions and storage type.
 
+Why not 17 significant digits, the usual way to write a double exactly?
+Because reading them back depends on the decimal parser, and R’s is not
+correctly rounded beyond about 15 digits: many 17-digit strings come
+back one unit in the last place off. The hexadecimal form maps to the
+bits of the double directly, and simcompR decodes it itself. Subnormal
+numbers are written as `"0x0.0000000000001p-1022"` (for the smallest
+one), a form R’s own parser also reads exactly.
+
 ## The format
 
 ``` r
@@ -93,7 +101,7 @@ Encoded values:
 
 | JSON form | R value |
 |----|----|
-| `{"$num": ["0.10000000000000001"]}` | numeric vector, exact |
+| `{"$num": ["0.1", "0x1.5555555555555p-2"]}` | numeric vector, exact |
 | `{"$matrix": {"nrow": 2, "ncol": 2, "data": [...]}}` | numeric matrix |
 | `{"$int": ["1", "NA"]}` | integer vector |
 | `{"$chr": ["a", null]}`, `{"$lgl": [...]}`, `{"$list": [...]}` | other vectors and lists; `null` is a missing string |
@@ -102,8 +110,23 @@ Encoded values:
 | `{"$model": {...}}` | nested subsystem |
 | `{"$transition": {...}}` | [`sim_transition()`](https://adamrsophie.github.io/simcompR/reference/sim_transition.md) |
 
+Each encoded value is an object with exactly one of these `$` tags and,
+for vectors, an optional `names` member; the order of the members does
+not matter. A value with no tag, two tags or unknown members is refused.
+
+Numbers are checked when read: a hexadecimal number may have at most 14
+digits and an exponent within the range of a double, and a value that
+would overflow, or round to zero although its digits are not zero, is
+refused with “Invalid number”. Decoding therefore takes a bounded time
+whatever the file holds. A block parameter that appears twice is refused
+too, when a model is built, written or read, because its meaning would
+be ambiguous.
+
 Files from a newer schema version are refused with a clear error rather
-than read incorrectly.
+than read incorrectly. Schema version 1 is the first; files written by
+this version can be read by later versions that keep schema 1, but no
+promise is made for files edited by hand into forms that simcompR does
+not write.
 
 ## What can be saved
 

@@ -79,6 +79,40 @@ sim_connect(model, from = reference, to = plant)
 #> ! Input 1 of block 'plant' is already connected to 'error' output 1. Disconnect it first with sim_disconnect().
 ```
 
+[`sim_blocks()`](https://adamrsophie.github.io/simcompR/reference/sim_blocks.md)
+and
+[`sim_connections()`](https://adamrsophie.github.io/simcompR/reference/sim_blocks.md)
+list what a model holds as data frames, and the editing functions undo
+any step:
+[`sim_disconnect()`](https://adamrsophie.github.io/simcompR/reference/sim_disconnect.md)
+removes the connection into an input port,
+[`sim_remove_block()`](https://adamrsophie.github.io/simcompR/reference/sim_disconnect.md)
+removes a block with its connections,
+[`sim_set_block_params()`](https://adamrsophie.github.io/simcompR/reference/sim_set_block_params.md)
+changes parameters and
+[`sim_copy()`](https://adamrsophie.github.io/simcompR/reference/sim_copy.md)
+makes an independent copy to experiment on.
+
+``` r
+
+sim_blocks(model)
+#>        name       type   category
+#> 1 reference   constant     source
+#> 2     error        sum       math
+#> 3     plant integrator continuous
+sim_connections(model)
+#>        from from_port    to to_port
+#> 1 reference         1 error       1
+#> 2     plant         1 error       2
+#> 3     error         1 plant       1
+draft <- sim_copy(model, "draft")
+sim_disconnect(draft, "plant")
+nrow(sim_connections(draft))
+#> [1] 2
+nrow(sim_connections(model))  # the original is unchanged
+#> [1] 3
+```
+
 ## Step 3: compile
 
 Compilation validates the whole diagram and produces an immutable
@@ -150,10 +184,13 @@ head(sim_signal(result, c("plant", "error")))
 plot(result, c("plant", "error"))
 ```
 
-![](simcompR_files/figure-html/unnamed-chunk-10-1.png)
+![](simcompR_files/figure-html/unnamed-chunk-11-1.png)
 
 [`summary()`](https://rdrr.io/r/base/summary.html) reports the solver
-statistics and final states:
+statistics and final states, and
+[`as.data.frame()`](https://rdrr.io/r/base/as.data.frame.html) gives one
+row per output time, with every signal and state as a column, ready for
+other tools:
 
 ``` r
 
@@ -165,6 +202,11 @@ summary(result)
 #> Final continuous states:
 #>     plant 
 #> 0.9999546
+head(as.data.frame(result), 3)
+#>   time   kind     error       plant reference state:plant
+#> 1 0.00 sample 1.0000000 0.000000000         1 0.000000000
+#> 2 0.01 sample 0.9900498 0.009950177         1 0.009950177
+#> 3 0.02 sample 0.9801987 0.019801323         1 0.019801323
 ```
 
 ## Where to go next
