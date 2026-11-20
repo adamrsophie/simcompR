@@ -239,6 +239,11 @@ check_safe_expr <- function(expr, what) {
 
 # Environment holding only the permitted functions and constants. Its parent
 # is the empty environment, so nothing else in R is reachable by name.
+# Settings of the run in progress that blocks read (set by sim_run()).
+.run <- new.env(parent = emptyenv())
+.run$zc_tol <- 1e-9
+run_zc_tol <- function() .run$zc_tol
+
 safe_env <- local({
   env <- NULL
   function() {

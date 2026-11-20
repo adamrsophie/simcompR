@@ -18,8 +18,12 @@ register_logic_blocks <- function() {
         op <- match.arg(p$op, names(compare_ops))
         thr <- check_number(p$threshold, "`threshold`")
         f <- compare_ops[[op]]
+        above <- as.numeric(op %in% c(">", ">=", "!="))
+        below <- as.numeric(op %in% c("<", "<=", "!="))
         elementwise_block(function(v) as.numeric(f(v, thr)), kinks = function(v) v - thr,
-                          jumps = TRUE)
+                          jump = list(at = function(v) rep(thr, length(v)),
+                                      value = function(k, s) ifelse(s > 0, above, below),
+                                      slope = function(k) rep(1, length(k))))
       })
 
   reg("logic", category = "logic",
@@ -48,9 +52,6 @@ register_logic_blocks <- function() {
       build = function(p) {
         thr <- check_number(p$threshold, "`threshold`")
         crit <- match.arg(p$criterion, c(">=", ">", "!="))
-        # on the threshold within rounding of u - threshold, never a band wide
-        # enough to hide a jump across it
-        tol <- max(1e-9, 8 * .Machine$double.eps * abs(thr))
         test <- function(c2) switch(crit, ">=" = c2 >= thr, ">" = c2 > thr,
                                     "!=" = c2 != thr)
         # The discrete state is the mode (1 = pass in1). It changes only at
@@ -76,8 +77,11 @@ register_logic_blocks <- function() {
              on_rest = function(i, t, x, d, u) list(d = as.numeric(test(thr))),
              # on the threshold the mode is decided by where the control goes
              # next (on_zc on a departure, on_rest on a plateau), not here
+             # "on the threshold" is the run's zc_tol band, the one the
+             # crossing itself uses, widened only by the rounding of u - thr
              modes = function(t, x, d, u) {
                g <- u[[2]] - thr
+               tol <- run_zc_tol() + 4 * .Machine$double.eps * max(abs(u[[2]]), abs(thr))
                if (d[[1]] >= 0 && abs(g) <= tol) d else as.numeric(test(u[[2]]))
              })
       })

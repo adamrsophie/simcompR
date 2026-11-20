@@ -264,12 +264,16 @@ register_state_machine_block <- function() {
       by_state <- lapply(seq_along(states), function(s) Filter(function(tr) tr$from == s, trs))
       run <- function(s, entered, data, u, t) {
         v <- unlist(u, use.names = FALSE)
-        # time in the state counted in whole clock periods: hits are a whole
-        # number of periods apart, so the rounding of large times cannot
-        # move a transition to another hit
-        held_for <- if (per > 0) round((t - entered) / per) * per else t - entered
+        # the true time in the state; the only allowance is the rounding of
+        # t and of the entry time (half an ulp each, so at most
+        # 2 * eps * max(|t|, |entry|) together; the subtraction of the two
+        # is exact), so an entry between hits (an initial state or an event
+        # reset) waits its full duration while large time origins still
+        # fire on time
+        held_for <- t - entered
+        slack <- 2 * .Machine$double.eps * max(abs(t), abs(entered))
         for (tr in by_state[[s]]) {
-          if (held_for < tr$after * (1 - 4 * .Machine$double.eps)) next
+          if (held_for < tr$after * (1 - 4 * .Machine$double.eps) - slack) next
           if (!tr$guard(v, t, t - entered, data)) next
           if (!is.null(acts$exit[[s]])) data <- acts$exit[[s]](data, v, t)
           if (!is.null(tr$action)) data <- tr$action(data, v, t)

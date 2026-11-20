@@ -148,8 +148,10 @@ solve_loop <- function(plan, item, t, x, d, sig, ticking, t_left = Inf, left = i
   if (!is.null(ord)) {
     s <- sig
     for (k in ord) {
+      # accepted values, not Newton trials: they must be finite, as outside loops
       s <- write_outputs(blocks[[k]], blocks[[k]]$def$output(
-        tk[k], x[blocks[[k]]$x_idx], d[blocks[[k]]$d_idx], block_inputs(blocks[[k]], s)), s)
+        tk[k], x[blocks[[k]]$x_idx], d[blocks[[k]]$d_idx], block_inputs(blocks[[k]], s)), s,
+        strict = TRUE)
     }
     return(list(sig = s, residual = 0, iterations = 0L))
   }

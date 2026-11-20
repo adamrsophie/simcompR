@@ -32,7 +32,10 @@ taken by the integrator.}
 
 \item{method}{Integration method passed to \code{\link[deSolve:ode]{deSolve::ode()}}. Models with
 zero crossings need one of \code{"lsoda"}, \code{"lsode"}, \code{"lsodes"} or
-\code{"lsodar"}. The fixed-step methods \code{"euler"} and \code{"rk4"} take steps of
+\code{"lsodar"}. \code{"radau"} and \code{"iteration"} are refused because they cannot
+stop at segment boundaries, and \code{"ode23"} because its implementation
+in deSolve can take one uncontrolled step across a whole segment. The
+fixed-step methods \code{"euler"} and \code{"rk4"} take steps of
 at most \code{hmax}, by default \code{(tf - t0) / 1000}, shortened to end at
 every boundary and output time.}
 
@@ -64,12 +67,22 @@ away from zero; a function that approaches zero inside the band, or
 stays on it, is watched until it leaves the band, and the event fires
 then in the direction of the side it leaves on. A function that enters
 the band without reaching zero (an asymptotic approach) is reported
-once, at the next segment boundary.}
+once, at the next segment boundary: with the default band, an event
+watching \code{exp(-t)} falling fires at the first boundary after
+\code{t = -log(1e-9)}, about 20.7, which moves when sample clocks add
+boundaries. The same band decides when a switch control, or the
+input of \code{compare}, \code{sign}, \code{floor}, \code{ceiling} or \code{round}, is on its
+threshold (widened only by the rounding of large values). Use
+\code{zc_tol = 0} to count exact sign changes only.}
 
 \item{on_failure}{\code{"error"} raises an error when the simulation fails;
 \code{"warn"} returns the partial result with a warning.}
 
-\item{...}{Further arguments for \code{\link[deSolve:ode]{deSolve::ode()}}.}
+\item{...}{Further named arguments for \code{\link[deSolve:ode]{deSolve::ode()}}, such as
+\code{jactype} and \code{jacfunc}. A \code{jacfunc} receives the absolute time, as the
+model does. Arguments that set the times, events or root functions
+(\code{times}, \code{events}, \code{rootfunc}, \code{tcrit}, \code{forcings} and the compiled
+code interface) are refused, because simcompR sets them itself.}
 }
 \value{
 A \code{sim_result}. See \code{\link[=sim_signal]{sim_signal()}}, \code{\link[=sim_states]{sim_states()}},

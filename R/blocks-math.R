@@ -19,24 +19,43 @@ expand <- function(v, n) if (length(v) == n) v else rep(v, n)
 # `kinks(v)`, when given, returns the crossing functions of the input
 # vector v whose zeros are the kinks of `fun`; `per` is their number per
 # input element.
-elementwise_block <- function(fun, kinks = NULL, per = 1L, jumps = FALSE) {
+#
+# `jump`, for an output that jumps at its kinks (one kink function per
+# element), describes the jump exactly in input units: `at(v)` is the kink
+# nearest to v, `value(k, s)` the output just past kink k on side s (+1
+# above, -1 below) and `slope(k)` the sign of the kink function's slope at
+# k. The output then jumps at the located instant itself.
+elementwise_block <- function(fun, kinks = NULL, per = 1L, jump = NULL) {
   def <- list(inputs = NA, outputs = NA, feedthrough = TRUE,
               size_out = function(n) n,
               output = function(t, x, d, u) fun(u[[1]]))
   if (!is.null(kinks) && per > 0L) {
     def$kinks <- function(t, x, d, u) kinks(u[[1]])
     def$kink_size <- function(n) per * n[[1]]
-    # the output jumps at its kinks (one per element): the side is kept
-    def$kink_side <- jumps && per == 1L
+    if (per == 1L) def$jump <- jump
   }
   def
 }
 
 # Crossing functions for kinks of the math functions that have them.
+# sinpi() and cospi() reduce their argument exactly, so these stay accurate
+# far from the origin.
 math_kinks <- list(
   abs = function(v) v, sign = function(v) v,
-  floor = function(v) sin(pi * v), ceiling = function(v) sin(pi * v),
-  round = function(v) cos(pi * v)
+  floor = function(v) sinpi(v), ceiling = function(v) sinpi(v),
+  round = function(v) cospi(v)
+)
+
+# Exact one-sided values of the functions that jump.
+math_jumps <- list(
+  sign = list(at = function(v) 0 * v, value = function(k, s) s,
+              slope = function(k) rep(1, length(k))),
+  floor = list(at = round, value = function(k, s) ifelse(s > 0, k, k - 1),
+               slope = function(k) sign(cospi(k))),
+  ceiling = list(at = round, value = function(k, s) ifelse(s > 0, k + 1, k),
+                 slope = function(k) sign(cospi(k))),
+  round = list(at = function(v) floor(v) + 0.5, value = function(k, s) k + s / 2,
+               slope = function(k) -sign(sinpi(k)))
 )
 
 math_functions <- list(
@@ -153,7 +172,7 @@ register_math_blocks <- function() {
         }
         k <- math_kinks[[p$fun]]
         elementwise_block(math_functions[[p$fun]], kinks = k, per = if (is.null(k)) 0L else 1L,
-                          jumps = p$fun %in% c("sign", "floor", "ceiling", "round"))
+                          jump = math_jumps[[p$fun]])
       })
 
   reg("minmax", category = "math",

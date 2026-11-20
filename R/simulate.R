@@ -81,7 +81,10 @@ root_methods <- c("lsoda", "lsode", "lsodes", "lsodar")
 #'   taken by the integrator.
 #' @param method Integration method passed to [deSolve::ode()]. Models with
 #'   zero crossings need one of `"lsoda"`, `"lsode"`, `"lsodes"` or
-#'   `"lsodar"`. The fixed-step methods `"euler"` and `"rk4"` take steps of
+#'   `"lsodar"`. `"radau"` and `"iteration"` are refused because they cannot
+#'   stop at segment boundaries, and `"ode23"` because its implementation
+#'   in deSolve can take one uncontrolled step across a whole segment. The
+#'   fixed-step methods `"euler"` and `"rk4"` take steps of
 #'   at most `hmax`, by default `(tf - t0) / 1000`, shortened to end at
 #'   every boundary and output time.
 #' @param rtol,atol Relative and absolute tolerances.
@@ -106,10 +109,20 @@ root_methods <- c("lsoda", "lsode", "lsodes", "lsodar")
 #'   stays on it, is watched until it leaves the band, and the event fires
 #'   then in the direction of the side it leaves on. A function that enters
 #'   the band without reaching zero (an asymptotic approach) is reported
-#'   once, at the next segment boundary.
+#'   once, at the next segment boundary: with the default band, an event
+#'   watching `exp(-t)` falling fires at the first boundary after
+#'   `t = -log(1e-9)`, about 20.7, which moves when sample clocks add
+#'   boundaries. The same band decides when a switch control, or the
+#'   input of `compare`, `sign`, `floor`, `ceiling` or `round`, is on its
+#'   threshold (widened only by the rounding of large values). Use
+#'   `zc_tol = 0` to count exact sign changes only.
 #' @param on_failure `"error"` raises an error when the simulation fails;
 #'   `"warn"` returns the partial result with a warning.
-#' @param ... Further arguments for [deSolve::ode()].
+#' @param ... Further named arguments for [deSolve::ode()], such as
+#'   `jactype` and `jacfunc`. A `jacfunc` receives the absolute time, as the
+#'   model does. Arguments that set the times, events or root functions
+#'   (`times`, `events`, `rootfunc`, `tcrit`, `forcings` and the compiled
+#'   code interface) are refused, because simcompR sets them itself.
 #' @return A `sim_result`. See [sim_signal()], [sim_states()],
 #'   [sim_events()], [sim_diagnostics()] and `plot()`.
 #' @examples
@@ -146,6 +159,9 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
   if (!is_scalar_number(zc_tol) || zc_tol < 0) {
     sim_abort("`zc_tol` must be a single finite number of at least 0.")
   }
+  old_tol <- .run$zc_tol
+  .run$zc_tol <- zc_tol
+  on.exit(.run$zc_tol <- old_tol, add = TRUE)
   if (!is.logical(include_ticks) || length(include_ticks) != 1L || is.na(include_ticks)) {
     sim_abort("`include_ticks` must be TRUE or FALSE.")
   }
@@ -158,6 +174,14 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
   if (method %in% c("radau", "iteration")) {
     sim_abort("method = \"", method, "\" is not supported: it cannot be told to stop at ",
               "segment boundaries.")
+  }
+  if (method == "ode23") {
+    # deSolve (1.40, 1.42) ignores hmax, hini and the tolerances for "ode23"
+    # when asked for few output times: x' = -x on [0, 1] returns 1/3, one
+    # step of size 1, instead of exp(-1)
+    sim_abort("method = \"ode23\" is not supported: deSolve's ode23 can take a single ",
+              "uncontrolled step across a segment and return a wrong result; use ",
+              "\"ode45\" or \"lsoda\".")
   }
   # kinks of memoryless blocks are optional crossing functions
   optional <- c(plan$zc$optional %||% rep(FALSE, plan$zc$n), rep(FALSE, n_event_zc))
@@ -212,7 +236,8 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
   bp_list <- lapply(seq_along(plan$blocks), function(i) {
     b <- plan$blocks[[i]]
     v <- if (is.function(b$def$breakpoints)) b$def$breakpoints(t0, tf)
-    v[v > t0 & v < tf]
+    # one at tf still marks the source: the last segment sees its left limit
+    v[v > t0 & v <= tf + tol]
   })
   sched_times <- lapply(sched, function(e) {
     v <- e$trigger$times
@@ -249,6 +274,21 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
   }
 
   ode_args <- list(...)
+  # the solver runs on segment-local time and its own event and root
+  # machinery belongs to simcompR: options that carry absolute times or
+  # replace that machinery cannot be passed through
+  reserved <- c("y", "times", "func", "parms", "rootfunc", "events", "tcrit", "nroot",
+                "forcings", "initforc", "fcontrol", "dllname", "initfunc", "initpar",
+                "outnames", "nout", "rpar", "ipar")
+  bad <- intersect(names(ode_args), reserved)
+  if (length(bad)) {
+    sim_abort("deSolve argument(s) ", paste0("`", bad, "`", collapse = ", "),
+              " cannot be passed to sim_run(): simcompR sets the times, events and root ",
+              "functions itself; use sim_add_event() for events.")
+  }
+  if (length(ode_args) && (is.null(names(ode_args)) || any(!nzchar(names(ode_args))))) {
+    sim_abort("Further arguments for deSolve must be named.")
+  }
   # With crossing functions, cap the step so that two crossings inside one
   # step (which the root finder cannot see) need a fast signal.
   if (is.null(hmax) && nzc && n_strict) hmax <- (tf - t0) / 100
@@ -256,6 +296,8 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
   # fixed-step methods step from one requested time to the next; give them
   # a grid of their own so results do not depend on `times`
   fixed_step <- if (method %in% c("euler", "rk4")) hmax %||% ((tf - t0) / 1000)
+  # their step is that grid; deSolve would only note that it ignores hmax
+  if (!is.null(fixed_step)) ode_args$hmax <- NULL
   # without continuous states nothing is integrated, so kinks need no stop
   if (plan$nx == 0L && !n_strict) nzc <- 0L
   dummy <- plan$nx == 0L && nzc > 0L
@@ -601,6 +643,9 @@ sim_run <- function(plan, tspan, times = NULL, method = "lsoda",
       if (!is.function(b$def$stop_if)) next
       if (any(startsWith(fired_blk, paste0(b$name, " ")))) next
       if (isTRUE(b$def$stop_if(t, x[b$x_idx], d[b$d_idx], block_inputs(b, ev$sig)))) {
+        # a stop is a handler like any other: it counts against max_events
+        if (!budget_left()) break
+        nev <<- nev + 1L
         note_pre()
         log_event(t, b$name, "stop", b$name)
         out$terminal <- TRUE
@@ -787,7 +832,7 @@ integrate_segment <- function(plan, t, tn, inner, x, d, held, dummy, method,
   args <- c(list(y = y0, times = sort(unique(c(0, inner_local, grid, L))), func = func, parms = NULL,
                  method = method, rtol = rtol, atol = atol, maxsteps = maxsteps,
                  tcrit = L),
-            ode_args)
+            local_time_args(ode_args, at))
   g0 <- NULL
   if (nzc) {
     g0 <- zero_crossings(plan, t, x, d, evaluate(plan, t, x, d, held)$sig)
@@ -957,6 +1002,14 @@ jump_direction <- function(g_end, g_start, g, zc_tol) {
 # change at the shortest time where the function has moved, so a later
 # reversal does not hide the direction it leaves in. Returns 0 where the
 # function did not move.
+# deSolve callbacks that take the time, called on the solver's local time
+# tau, see the absolute time at(tau), as the model does.
+local_time_args <- function(ode_args, at) {
+  jac <- ode_args$jacfunc
+  if (is.function(jac)) ode_args$jacfunc <- function(tau, y, parms, ...) jac(at(tau), y, parms, ...)
+  ode_args
+}
+
 departure_probe <- function(plan, t, tn, x, d, held, ode_args, hmax, left, g) {
   H <- (tn - t) / 1000
   if (!is.null(hmax)) H <- min(H, hmax)
@@ -976,7 +1029,8 @@ departure_probe <- function(plan, t, tn, x, d, held, ode_args, hmax, left, g) {
                                                 left = left)$sig))
     }
     out <- suppressWarnings(do.call(deSolve::ode, c(list(y = x, times = c(0, hs), func = func,
-                                                          parms = NULL), ode_args)))
+                                                          parms = NULL),
+                                                     local_time_args(ode_args, function(tau) t + tau))))
     if (nrow(out) < length(hs) + 1L || !all(is.finite(out[, -1L]))) {
       sim_abort("the integration just after this instant failed; the model may be ",
                 "chattering at a discontinuity (a sliding mode).")

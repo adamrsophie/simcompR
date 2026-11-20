@@ -315,16 +315,19 @@ propagate_sizes <- function(defs, src, bnames) {
         }
         if (anyNA(ins[[i]])) {
           # partial pass inside a feedback loop: accept only a definite answer
-          new <- tryCatch(suppressWarnings(as.integer(f(ins[[i]]))), error = function(e) NA)
-          if (anyNA(new) || length(new) != length(outs[[i]])) next
+          new <- tryCatch(f(ins[[i]]), error = function(e) NA)
+          if (!valid_sizes(new) || length(new) != length(outs[[i]])) next
         } else {
-          new <- withCallingHandlers(as.integer(f(ins[[i]])), error = function(e) {
+          new <- withCallingHandlers(f(ins[[i]]), error = function(e) {
             sim_abort("Block '", bnames[i], "' (", defs[[i]]$type, "): ", conditionMessage(e))
           })
+          if (!valid_sizes(new) || length(new) != length(outs[[i]])) {
+            sim_abort("Block '", bnames[i], "': `size_out` returned ", deparse_short(new),
+                      "; expected ", length(outs[[i]]), " whole number(s) from 1 to ",
+                      .Machine$integer.max, ".")
+          }
         }
-        if (length(new) != length(outs[[i]]) || anyNA(new) || any(new < 1L)) {
-          sim_abort("Block '", bnames[i], "': could not determine output sizes.")
-        }
+        new <- as.integer(new)
         known <- !is.na(outs[[i]])
         if (any(outs[[i]][known] != new[known])) {
           sim_abort("Block '", bnames[i], "': declared and computed output sizes differ.")
@@ -364,7 +367,8 @@ propagate_sizes <- function(defs, src, bnames) {
     f <- defs[[i]]$size_out
     # declared sizes are not inferred and are checked at run time instead
     if (!is.function(f) || all(declared[[i]])) next
-    final <- tryCatch(suppressWarnings(as.integer(f(ins[[i]]))), error = function(e) NULL)
+    final <- tryCatch(f(ins[[i]]), error = function(e) NULL)
+    final <- if (valid_sizes(final)) as.integer(final)
     inf <- !declared[[i]]
     if (!is.null(final) && length(final) == length(outs[[i]]) &&
         any(final[inf] != outs[[i]][inf])) {
@@ -387,6 +391,12 @@ propagate_sizes <- function(defs, src, bnames) {
 }
 
 layout_vectors <- function(defs, sizes, bnames) {
+  # total signal length, summed in double precision before any allocation
+  total <- sum(as.numeric(unlist(sizes$out)))
+  if (total > .Machine$integer.max) {
+    sim_abort("The model's signals have ", format(total, big.mark = ","),
+              " elements in total, more than ", .Machine$integer.max, ".")
+  }
   out_idx <- x_idx <- d_idx <- vector("list", length(defs))
   sig_names <- character(); signal_of <- list()
   state_names <- dstate_names <- character()
@@ -477,7 +487,7 @@ add_kinks <- function(d, in_sizes, name) {
   d$zc_direction <- c(if (nz) d$zc_direction, rep("either", nk))
   d$zc_optional <- c(rep(FALSE, nz), rep(TRUE, nk))
   d$nzc <- nz + nk
-  if (isTRUE(d$kink_side) && !nz && nk == in_sizes[[1]]) d <- add_kink_sides(d, nk, kf)
+  if (is.list(d$jump) && !nz && nk == in_sizes[[1]]) d <- add_kink_sides(d, nk, kf)
   d
 }
 
@@ -485,41 +495,52 @@ add_kinks <- function(d, in_sizes, name) {
 # ceiling, round) keeps, per element, the side of the kink the input is
 # heading to: set by the direction of a located kink (or of a departure
 # from it) and cleared once the input is off the kink. On the kink the
-# output is taken just past it on that side, so the jump happens at the
-# instant itself, where switches, stop blocks and events see it.
+# output is the exact one-sided value on that side, so the jump happens at
+# the instant itself, where switches, stop blocks and events see it. The
+# input is never changed. "On the kink" means within the run's zc_tol of it
+# in input units, widened only by the rounding of the input itself.
 add_kink_sides <- function(d, nk, kf) {
   nd0 <- d$nd
   out0 <- d$output
-  band <- function(v) 1e-8 * (1 + abs(v))
+  jp <- d$jump
+  # discrete states: the side and the kink it belongs to, per element
   sides <- function(dd) dd[nd0 + seq_len(nk)]
-  d$nd <- nd0 + nk
-  d$d0 <- c(d$d0, numeric(nk))
+  kinks <- function(dd) dd[nd0 + nk + seq_len(nk)]
+  on_kink <- function(v) {
+    k <- jp$at(v)
+    abs(v - k) <= run_zc_tol() + 4 * .Machine$double.eps * pmax(abs(v), abs(k))
+  }
+  d$kink_side <- TRUE
+  d$nd <- nd0 + 2L * nk
+  d$d0 <- c(d$d0, numeric(2L * nk))
   d$output <- function(t, x, dd, u) {
+    y <- out0(t, x, dd[seq_len(nd0)], u)
     s <- sides(dd)
     if (any(s != 0)) {
       v <- u[[1]]
-      on <- s != 0 & abs(kf(t, x, dd, u)) <= band(v)
-      v[on] <- v[on] + s[on] * 10 * band(v[on])
-      u[[1]] <- v
+      k <- jp$at(v)
+      on <- s != 0 & k == kinks(dd) & on_kink(v)
+      if (any(on)) y[on] <- jp$value(k[on], s[on])
     }
-    out0(t, x, dd[seq_len(nd0)], u)
+    y
   }
   d$on_zc <- function(i, direction, t, x, dd, u) {
-    v <- u[[1]]
-    h <- 10 * band(v[i])
-    up <- u; up[[1]][i] <- v[i] + h
-    dn <- u; dn[[1]][i] <- v[i] - h
+    v <- u[[1]][i]
     # direction of the input from the direction of the kink function
-    slope <- sign(kf(t, x, dd, up)[i] - kf(t, x, dd, dn)[i])
     dirs <- c(rising = 1, falling = -1, either = 0)
+    k <- jp$at(v)
     out <- dd
-    out[nd0 + i] <- dirs[[direction]] * slope
+    out[nd0 + i] <- dirs[[direction]] * jp$slope(k)
+    out[nd0 + nk + i] <- k
     list(silent = TRUE, d = out)
   }
   d$modes <- function(t, x, dd, u) {
     s <- sides(dd)
-    s[abs(kf(t, x, dd, u)) > band(u[[1]])] <- 0
-    c(dd[seq_len(nd0)], s)
+    k <- kinks(dd)
+    off <- !on_kink(u[[1]]) | jp$at(u[[1]]) != k
+    s[off] <- 0
+    k[off] <- 0
+    c(dd[seq_len(nd0)], s, k)
   }
   d
 }
@@ -755,4 +776,11 @@ set_held0 <- function(b, d0, held) {
     held[b$out_idx[[j]]] <- v
   }
   held
+}
+
+# Signal sizes as a block reports them, checked before any integer
+# conversion: as.integer(2.5) would be 2 and as.integer(2^31) NA.
+valid_sizes <- function(v) {
+  is.numeric(v) && length(v) && !anyNA(v) && all(is.finite(v)) && all(v == round(v)) &&
+    all(v >= 1) && all(v <= .Machine$integer.max)
 }
