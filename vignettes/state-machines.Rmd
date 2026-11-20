@@ -40,6 +40,40 @@ Guards and actions are strings (portable, checked against a whitelist) or R
 functions. Guards see `u` (the input vector), `t`, `elapsed` and the data
 variables; actions assign data variables.
 
+Guards and actions must be pure: their result may depend only on their
+arguments. The block evaluates them once to compute its outputs at a hit
+and again to compute its next state, and the event engine may evaluate
+them at more points of one instant, so a function with side effects
+(printing, drawing random numbers, counting calls) would see more calls
+than hits.
+
+### Elapsed time
+
+`after` compares the true time in the state, `t` minus the entry time,
+with the requested duration. The only allowance is for the rounding of
+the two times, at most $2\varepsilon\max(|t|, |t_\text{entry}|)$, so a
+wait of one period far from the origin fires on time. A state can be
+entered between sample hits, through an initial override or an event
+reset; it then waits its full duration and fires at the first hit after
+it has elapsed. Here the machine enters `a` at $t = 0.4$ and its one
+second wait fires at $t = 2$, not at the hit at $t = 1$:
+
+```{r}
+fsm <- sim_model("late_entry")
+sim_add_block(fsm, "constant", "c")
+sim_add_block(fsm, "state_machine", "sm", period = 1, states = c("a", "b"),
+              transitions = list(sim_transition("a", "b", after = 1)))
+sim_connect(fsm, "c", "sm")
+r <- sim_run(sim_compile(fsm), c(0.4, 3), times = c(0.4, 1, 2, 3),
+             include_ticks = FALSE, initial = list(sm = c(1, 0.4)))
+sim_signal(r, "sm")
+```
+
+The discrete states of the block are the active state index, the entry
+time and the data variables (see `sim_discrete_states()`). Before the
+first hit the entry time is `-Inf`, meaning "not entered yet"; this is the
+one discrete state allowed to be non-finite.
+
 ## A timed traffic light
 
 ```{r}

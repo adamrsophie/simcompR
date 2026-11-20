@@ -65,11 +65,22 @@ interpolates more output points.
 
 ## Solvers and tolerances
 
-Any method of `deSolve::ode()` that can be told to stop at given times
-can be used, which is every method except `"radau"` and `"iteration"`.
-Models with zero crossings need a root-finding method: `"lsoda"`,
-`"lsode"`, `"lsodes"` or `"lsodar"`. The default is `"lsoda"`, which
-switches automatically between stiff and nonstiff methods. Tolerances are
+The integrator is `deSolve::ode()`, called once per segment. The
+`method` argument chooses its method:
+
+| Method | Kind | Zero crossings and kinks |
+|--------|------|--------------------------|
+| `"lsoda"` (default) | switches between stiff and nonstiff | located |
+| `"lsode"`, `"lsodes"`, `"lsodar"` | BDF or Adams, stiff or sparse | located |
+| `"vode"`, `"daspk"`, `"bdf"`, `"adams"`, `"impAdams"` | variable step | skipped; models with events are refused |
+| `"ode45"` | explicit Runge-Kutta, adaptive | skipped; models with events are refused |
+| `"euler"`, `"rk4"` | fixed step of at most `hmax` | skipped; models with events are refused |
+| `"radau"`, `"iteration"` | | refused: they cannot stop at segment boundaries |
+| `"ode23"` | | refused: the deSolve code can take one uncontrolled step across a whole segment |
+
+"Skipped" means the integrator steps over the kinks of memoryless blocks
+(still stopping at source breakpoints and sample hits); events and
+switching blocks need a root-finding method. Tolerances are
 `rtol = 1e-6` and `atol = 1e-8` by default.
 
 ```{r}
@@ -87,8 +98,30 @@ r <- sim_run(plan, c(0, 3), times = seq(0, 3, 0.01), method = "rk4")
 abs(tail(sim_signal(r, "x"), 1) - exp(-6))
 ```
 
-Pass `hmax` to cap the step size, `maxsteps` to allow more steps per
-segment, and any other `deSolve` argument through `...`.
+The fixed-step methods step by `hmax`, by default one thousandth of the
+interval, shortened to end exactly at every boundary and output time, so
+the result does not depend on `times`. Pass `hmax` to cap the step size
+of the other methods too, and `maxsteps` to allow more steps per segment.
+
+Other `deSolve` arguments pass through `...`, by name. The solver works on
+the time since the start of each segment, so that segment lengths stay
+exact far from the origin, but a user Jacobian `jacfunc` receives the
+absolute time, as the model does. Here the Jacobian of
+$\dot x = -1000\,t\,x$ on $[5, 6]$, a stiff problem away from the origin:
+
+```{r}
+stiff <- sim_model("stiff")
+sim_add_block(stiff, "ode", "x", initial = 1, n_inputs = 0,
+              deriv = function(t, x, u) -1000 * t * x)
+r <- sim_run(sim_compile(stiff), c(5, 6), times = c(5, 6), method = "lsode",
+             jactype = "fullusr", jacfunc = function(t, x, parms) matrix(-1000 * t, 1, 1))
+c(status = r$status, steps = sim_diagnostics(r)$stats[["steps"]])
+```
+
+Arguments that set the times, events or root functions of the solver
+(`times`, `events`, `rootfunc`, `tcrit`, `forcings` and the compiled code
+interface) are refused: simcompR sets them itself, and events belong in
+`sim_add_event()`.
 
 ## Continuous blocks
 
@@ -197,6 +230,24 @@ sim_add_block(pw, "integrator", "x")
 sim_connect(pw, "u", "x")
 r <- sim_run(sim_compile(pw), c(0, 4), times = c(1, 2.5, 4))
 sim_signal(r, "x")  # exactly 1, -2 and -1.25
+```
+
+A source that jumps exactly at the end of the interval is still seen
+from the left by the last step, while the recorded value at the end is
+the value after the jump.
+
+Recorded data enter through `from_data`, interpolated linearly or held
+constant between samples (`method = "constant"`). A matrix of values,
+one row per time, gives a vector signal. Every sample time is a
+breakpoint, so a corner or jump between output times is never stepped
+over:
+
+```{r}
+fd <- sim_model("recorded")
+sim_add_block(fd, "from_data", "u", times = c(0, 1, 2), values = c(0, 2, 2))
+sim_add_block(fd, "integrator", "x")
+sim_connect(fd, "u", "x")
+sim_signal(sim_run(sim_compile(fd), c(0, 2), times = c(1, 2)), "x")  # 1 and 3
 ```
 
 ## Initial conditions

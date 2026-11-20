@@ -37,10 +37,20 @@ available to users: `sim_register_block_type()`. A block type is a
 | `update` | `function(t, x, d, u)` returning the next discrete state |
 | `held0` | `function(size, d0)` giving held outputs before the first hit |
 | `zc`, `on_zc`, `zc_direction` | zero-crossing functions and handlers |
+| `on_rest` | handler for a crossing function that stays on its level |
 | `modes` | `function(t, x, d, u)` giving the mode (stored in `d`) for the current inputs |
 | `stop_if` | `function(t, x, d, u)` returning `TRUE` to end the run |
 | `kinks`, `kink_size` | crossing functions at kinks of a memoryless output, and their number |
+| `jump` | exact one-sided values of an output that jumps at its kinks |
 | `breakpoints` | times where the block's output is discontinuous |
+| `check_sizes` | `function(in_sizes, out_sizes)` that signals an error for inconsistent sizes |
+| `input_names`, `output_names` | port names, when `inputs` and `outputs` are unnamed |
+| `nonfinite_ok` | indices of discrete states allowed to hold `-Inf` |
+
+Sizes must be whole numbers from 1 to `.Machine$integer.max`; `size_out`
+results are checked before they are used. `sim_register_block_type()`
+also takes `params` (the defaults) and `required` (parameters the user
+must give; by default those whose default is `NULL`).
 
 `u` is a list with one numeric vector per input port. `output` must be
 free of side effects: it is called at trial points of the solver.
@@ -151,11 +161,39 @@ r <- sim_run(sim_compile(lm), c(0, 2 * pi), times = 2 * pi,
 sim_signal(r, "x")   # zero over a full period
 ```
 
+When the output itself jumps at a kink, as for a step-shaped function,
+declare `jump` as well: it tells the simulator the exact output on each
+side of the kink, so the jump happens at the located instant. A unit step
+of the input at 2 (which `compare` already provides):
+
+```{r}
+sim_register_block_type(
+  "above_two", overwrite = TRUE, category = "user",
+  description = "1 when the input is above 2",
+  build = function(p) list(
+    inputs = NA, outputs = NA, feedthrough = TRUE,
+    size_out = function(n) n,
+    output = function(t, x, d, u) as.numeric(u[[1]] > 2),
+    kinks = function(t, x, d, u) u[[1]] - 2,
+    kink_size = function(n) n[[1]],
+    jump = list(at = function(v) rep(2, length(v)),
+                value = function(k, s) as.numeric(s > 0),
+                slope = function(k) rep(1, length(k)))))
+ab <- sim_model("above")
+sim_add_block(ab, "time", "t")
+sim_add_block(ab, "above_two", "a")
+sim_add_block(ab, "stop", "halt", threshold = 0.5)
+sim_connect(ab, "t", "a")
+sim_connect(ab, "a", "halt")
+max(sim_times(sim_run(sim_compile(ab), c(0, 5))))   # stops at exactly 2
+```
+
 A block whose output switches between branches keeps the branch in a
 discrete state, returns it from `modes` (called at boundaries until all
 modes settle) and moves it at located crossings with `zc` and `on_zc`;
-see the built-in `switch` and `relay` blocks. `stop_if` ends the run, as
-the `stop` block does.
+`on_rest` decides the branch when the control stays on its threshold. See
+the built-in `switch` and `relay` blocks. `stop_if` ends the run, as the
+`stop` block does.
 
 ## Portability
 

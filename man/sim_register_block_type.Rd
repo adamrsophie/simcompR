@@ -95,6 +95,13 @@ zeros are points where a memoryless output or its slope jumps (the
 corners of a saturation), and their number for the given input sizes.
 The integrator restarts exactly at each kink; nothing is logged. They
 are ignored by methods without root finding.
+\item \code{jump}: optional, for a block with one kink function per element of
+its single input whose output jumps there (like \code{compare} or \code{floor}):
+a list of \code{at(v)}, the kink nearest to each input value, \code{value(k, s)},
+the output just past kink \code{k} on side \code{s} (\code{1} above, \code{-1} below), and
+\code{slope(k)}, the sign of the kink function's slope at \code{k}. The output
+then jumps at the located instant itself, with the exact one-sided
+value, so blocks and events downstream see the jump there.
 \item \code{nonfinite_ok}: indices into \code{d} of discrete states that may hold
 \code{-Inf} (a "not yet" sentinel such as the entry time of a state machine
 before its first hit). All other values must stay finite.

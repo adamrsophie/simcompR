@@ -107,6 +107,15 @@ ref <- Reduce(function(x, k) 0.5 * x + 1, 1:10, accumulate = TRUE, 4)
 all.equal(unname(sim_signal(r, "x")), ref)
 ```
 
+`sim_signal()` gives block outputs; the discrete states behind them
+(here the state of the recurrence, which leads the output by one hit) are
+recorded too and returned by `sim_discrete_states()`, one column per
+state:
+
+```{r}
+head(sim_discrete_states(r), 3)
+```
+
 The same system as a transfer function in $z$, $\frac{1}{z - 0.5}$:
 
 ```{r}

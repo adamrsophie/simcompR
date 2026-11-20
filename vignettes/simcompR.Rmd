@@ -73,6 +73,21 @@ sim_connect(model, from = reference, to = error, input = 3)
 sim_connect(model, from = reference, to = plant)
 ```
 
+`sim_blocks()` and `sim_connections()` list what a model holds as data
+frames, and the editing functions undo any step: `sim_disconnect()`
+removes the connection into an input port, `sim_remove_block()` removes a
+block with its connections, `sim_set_block_params()` changes parameters
+and `sim_copy()` makes an independent copy to experiment on.
+
+```{r}
+sim_blocks(model)
+sim_connections(model)
+draft <- sim_copy(model, "draft")
+sim_disconnect(draft, "plant")
+nrow(sim_connections(draft))
+nrow(sim_connections(model))  # the original is unchanged
+```
+
 ## Step 3: compile
 
 Compilation validates the whole diagram and produces an immutable
@@ -123,10 +138,13 @@ head(sim_signal(result, c("plant", "error")))
 plot(result, c("plant", "error"))
 ```
 
-`summary()` reports the solver statistics and final states:
+`summary()` reports the solver statistics and final states, and
+`as.data.frame()` gives one row per output time, with every signal and
+state as a column, ready for other tools:
 
 ```{r}
 summary(result)
+head(as.data.frame(result), 3)
 ```
 
 ## Where to go next

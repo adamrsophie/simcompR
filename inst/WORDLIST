@@ -1,3 +1,4 @@
+BDF
 CMD
 Codecov
 Cx
@@ -6,6 +7,7 @@ Feedthrough
 Graphviz
 KTu
 Kahn's
+Kutta
 Lifecycle
 Longrightarrow
 Mersenne
@@ -15,6 +17,7 @@ Reachability
 Retriggering
 Rightarrow
 Roadmap
+Runge
 Simulink
 Stateflow
 Tarjan
@@ -52,3 +55,4 @@ qquad
 roadmap
 stateful
 symcompR
+varepsilon

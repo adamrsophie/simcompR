@@ -71,7 +71,7 @@ an algebraic loop and is reported at compile time.
 |------|----------|
 | Models | blocks, named and numbered ports, connections, model parameters, copies, editing |
 | Compilation | size propagation, direct-feedthrough graph, Tarjan components, deterministic order, plan reuse |
-| Continuous | integrator, transfer function, state space, general and autonomous `ode` blocks; deSolve methods that can stop at given times (all but `radau` and `iteration`) |
+| Continuous | integrator, transfer function, state space, general and autonomous `ode` blocks; deSolve methods that can stop at given times (all but `radau`, `iteration` and `ode23`) |
 | Discrete | unit delay, zero-order hold, discrete integrators, discrete state space and transfer functions |
 | Multirate | several sample rates and offsets, exact hit times, outputs before updates, rate notes |
 | Hybrid | scheduled and zero-crossing events, resets, events on subsystem internals, located kinks of saturation and similar blocks, switch, relay, stop, event limits |

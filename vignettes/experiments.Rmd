@@ -75,6 +75,15 @@ cbind(zeta = c(0.1, 0.3, 0.7, 1), s$summary[c("peak", "settle")],
 
 The overshoot matches the classical formula $1 + e^{-\pi\zeta/\sqrt{1-\zeta^2}}$.
 
+`s$parameters` records the value each parameter actually had in each run,
+including model values a run did not override. Scalars that share a type
+and class form an ordinary column (a `Date` stays a `Date`); vector
+values, like the denominators here, form a list column:
+
+```{r}
+s$parameters$den[[2]]
+```
+
 ```{r}
 cols <- seq_along(s$results)
 matplot(sim_times(s$results[[1]]), sapply(s$results, sim_signal, "G"),
@@ -93,8 +102,10 @@ automatically.
 ## Monte Carlo
 
 `sim_monte_carlo()` draws parameter sets under a fixed seed. The caller's
-random stream is saved and restored, so the experiment is reproducible and
-does not disturb other random code:
+random stream (`.Random.seed` and `RNGkind()`) is saved and restored, so
+the experiment is reproducible and does not disturb other random code,
+including when the sampler fails. With `keep = FALSE` only the summaries
+are kept, which saves memory for many runs:
 
 ```{r}
 set.seed(2024)
@@ -111,6 +122,13 @@ hist(mc$summary$peak, main = "Peak response", xlab = "peak")
 ```
 
 Running it again with the same seed returns identical numbers.
+
+One restriction: with `RNGkind(normal.kind = "Box-Muller")`, R keeps the
+second deviate of each Box-Muller pair outside `.Random.seed`, and that
+cached value cannot be restored from R. `sim_monte_carlo()` warns in that
+case, and the caller's next `rnorm()` may differ from what it would have
+been. With the default `"Inversion"` (and the other normal kinds) the
+stream is restored exactly.
 
 ## Noise inputs
 
@@ -133,10 +151,20 @@ plot(r1, c("w", "filter"))
 ## Failures inside experiments
 
 Runs that fail are kept with status `"failed"` and missing summaries; they
-are never silently dropped. Use `s$status` and `s$messages` to inspect them.
+are never silently dropped. Each run uses `on_failure = "warn"` unless
+another value is passed through `...`. Use `s$status` and `s$messages` to
+inspect them:
+
+```{r}
+bad <- suppressWarnings(sim_sweep(plan, list(list(den = c(1, 1, 4)), list(den = c(1, 1, NA))),
+                                  tspan = c(0, 1), times = c(0, 1)))
+bad$status
+bad$messages[2]
+```
 
 ## Parallel runs
 
 `cores > 1` runs simulations with `parallel::mclapply()` on Unix-like
-systems. Results do not depend on the number of cores, because every run is
-deterministic and seeds are drawn before the runs start.
+systems; on Windows the runs are sequential. Results do not depend on the
+number of cores, because every run is deterministic and seeds are drawn
+before the runs start.

@@ -138,6 +138,13 @@ c(reused = p1$structure_reused, loops = length(p1$graph$loops))
 With $D \neq 0$ the state-space block gains direct feedthrough and the
 feedback becomes an algebraic loop.
 
+`sim_param_values()` shows the model parameters a plan was built with,
+after `sim_set_params()`:
+
+```{r}
+sim_param_values(p1)
+```
+
 ## Diagnostics
 
 `sim_diagnostics()` on a plan returns the order, the loops, the dependency
